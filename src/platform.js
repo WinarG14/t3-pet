@@ -36,6 +36,44 @@ function openT3App(appPath) {
   return false;
 }
 
+/**
+ * macOS, run from source (`npm start`): start at sign-in through a per-user LaunchAgent.
+ * app.setLoginItemSettings registers the running bundle only (here the bare Electron.app, which would
+ * open Electron's default window), and its path/args options are Windows-only. The agent runs Electron
+ * with this app's folder and the PATH of the current session, so `codex` and `python3` resolve as in a
+ * terminal. Returns true when the agent file matches `on`.
+ */
+function setMacDevLoginItem(on, { label, execPath, appPath, envPath }) {
+  const file = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+  try {
+    if (!on) {
+      fs.rmSync(file, { force: true });
+      return true;
+    }
+    const x = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${x(label)}</string>
+  <key>ProgramArguments</key>
+  <array><string>${x(execPath)}</string><string>${x(appPath)}</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>${x(envPath || '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin')}</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, plist);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Stop a child process and everything it started. */
 function killTree(child) {
   if (!child || child.exitCode !== null) return;
@@ -45,4 +83,4 @@ function killTree(child) {
   } catch {}
 }
 
-module.exports = { IS_WIN, IS_MAC, defaultPython, defaultT3App, openT3App, killTree };
+module.exports = { IS_WIN, IS_MAC, defaultPython, defaultT3App, openT3App, killTree, setMacDevLoginItem };
