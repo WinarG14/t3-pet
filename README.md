@@ -38,10 +38,17 @@ see below) and shows a placeholder pet until you add or hatch one.
 
 - **Windows:** the first start adds a *T3 Pet* Start Menu shortcut; Windows needs it to show
   notifications under the app's name.
-- **macOS:** T3 Pet lives in the menu bar (no Dock icon). macOS may ask once to allow notifications
-  and once for Keychain access (where the app keeps its sign-ins and API keys).
+- **macOS:** T3 Pet lives in the menu bar (no Dock icon). Its sign-ins and API keys are kept
+  encrypted with a Keychain item named *T3 Pet Safe Storage*.
+  - **No system notifications when you run from source.** macOS delivers notifications only from a
+    code-signed app, and `npm start` runs Electron's development build, which is not signed. Nothing
+    shows and nothing asks for permission. The pet's speech bubble and badge still show every update.
+  - **Menu bar icon behind the notch.** On a MacBook with a camera notch and a full menu bar, macOS
+    can hide the icon behind the notch. Right-click the pet for the same menu.
 
-To start it with your computer: Settings → *Start when I sign in*.
+To start it with your computer: Settings → *Start when I sign in*. On macOS, when you run from
+source, this adds `~/Library/LaunchAgents/dev.t3pet.desktop.plist`, and macOS shows a one-time
+"App Background Activity" notice for *Electron*. Turn the setting off to remove the file.
 
 ## How it reads T3
 
@@ -83,7 +90,9 @@ panel can only send the fixed actions listed above. *Turn off* revokes it.
 
 A pet is a folder with `pet.json` and an 8×9 sprite sheet (`1536×1872`, cells of `192×208`), the
 Codex pet format. T3 Pet reads `~/.codex/pets/` (or `$CODEX_HOME/pets/`). Drop a pet folder there, or
-hatch one.
+hatch one. Version 2 pets (8×11, `1536×2288`, two extra rows of look directions) work too; T3 Pet
+uses their first 9 rows. With a version 2 `hatch-pet` skill, the FAL and Venice route still makes a
+standard 8×9 pet: it skips the look-direction images.
 
 ### Hatch a pet
 
