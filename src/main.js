@@ -393,7 +393,7 @@ function trayMenu() {
   ]);
 }
 function updateTray(mood) {
-  if (tray) tray.setToolTip(`T3 Pet: ${mood.label}`);
+  if (tray) tray.setToolTip(`T3 Pet: ${mood.label}${petVisible() ? '' : ' (pet hidden: right-click for Show pet)'}`);
 }
 function petVisible() {
   return !!(petWin && !petWin.isDestroyed() && petWin.isVisible());
@@ -550,7 +550,11 @@ function ensureWindowsShortcut() {
   } catch {}
 }
 
-app.on('second-instance', () => openPanel('tasks'));
+// Opening T3 Pet again (Start Menu, Spotlight) while it runs: bring the pet back and open the panel.
+app.on('second-instance', () => {
+  if (!petVisible()) setPetVisible(true);
+  openPanel('tasks');
+});
 // A GPU process crash can leave transparent windows blank: rebuild the pet window when it happens.
 app.on('child-process-gone', (_e, d) => { if (d && d.type === 'GPU') setTimeout(recreatePetWindow, 800); });
 app.on('window-all-closed', () => { /* keep running in the tray */ });

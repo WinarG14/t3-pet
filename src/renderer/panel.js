@@ -16,7 +16,10 @@ function applyPetVisibility(v) {
   $('#petBtn').classList.toggle('on', !petShown);
   if ($('#showPet')) $('#showPet').checked = petShown;
 }
-$('#petBtn').addEventListener('click', async () => applyPetVisibility(await window.pet.setPetVisible(!petShown)));
+$('#petBtn').addEventListener('click', async () => {
+  applyPetVisibility(await window.pet.setPetVisible(!petShown));
+  if (!petShown && window.say) window.say('Pet hidden. Click the paw (or the tray menu → Show pet) to bring it back.', 'info');
+});
 window.pet.onPetVisibility(applyPetVisibility);
 window.pet.petVisibility().then(applyPetVisibility);
 $('#pinBtn').innerHTML = ico('pin');
