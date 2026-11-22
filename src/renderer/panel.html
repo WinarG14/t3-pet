@@ -15,6 +15,7 @@
       <div class="sub" id="moodLine">Looking for T3…</div>
     </div>
     <div class="top-actions">
+      <button class="icon-btn" id="petBtn" title="Hide the pet"></button>
       <button class="icon-btn" id="openT3" title="Open T3 Code"></button>
       <button class="icon-btn" id="pinBtn" title="Keep this panel open"></button>
       <button class="icon-btn" id="closeBtn" title="Close"></button>
@@ -109,6 +110,8 @@
       </div>
       <div class="card">
         <h3><span id="icoPaw"></span>Pet</h3>
+        <label class="switch"><input type="checkbox" id="showPet"><i></i>Show the pet on screen</label>
+        <div class="row-end" style="justify-content:flex-start;margin:2px 0 8px"><button type="button" class="btn ghost small" id="resetPet">Bring pet back</button><span class="muted small" style="align-self:center">Moves it to the bottom-right corner</span></div>
         <div class="field"><span>Motion</span><div class="seg" id="motionSeg"><button type="button" data-v="calm">Calm</button><button type="button" data-v="lively">Lively</button></div></div>
         <label class="field"><span>Size</span><input type="range" id="scale" min="0.35" max="1" step="0.05"></label>
         <label class="switch"><input type="checkbox" id="normalizeSize"><i></i>Same size in every pose</label>

@@ -57,7 +57,7 @@ class TaskSource {
     this.remote = new Map();     // envId -> { at, threads, error }
     this.projects = new Map();   // envKey -> { at, names: Map }
     this.reads = new Map();      // thread key -> cached read
-    this.dismissed = new Map();  // thread key -> runId the user dismissed in the pet
+    this.dismissed = new Map();  // thread key -> 'runId|status' hidden in the pet until that changes
     this.last = null;
   }
 
@@ -215,7 +215,9 @@ class TaskSource {
       const r = this.reads.get(t.key) || {};
       if (r.completedAt && r.runId === t.runId) t.completedAt = r.completedAt;
       const visitedAt = t.isLocal && visits ? (visits.get(t.id) || '') : undefined;
-      const { state, detail } = deriveState(t, { ...r, visitedAt, dismissedRunId: this.dismissed.get(t.key) });
+      let { state, detail } = deriveState(t, { ...r, visitedAt });
+      // Hidden in the pet: stays quiet until the thread starts a new run or changes status.
+      if (this.dismissed.get(t.key) === `${t.runId}|${t.status}`) state = 'idle';
       out.push({
         ...t,
         state,
@@ -253,7 +255,7 @@ class TaskSource {
     const t = this.last && this.last.threads.find(x => x.key === key);
     if (!t) throw new Error('That thread is no longer listed.');
     if (action === 'dismiss') {
-      this.dismissed.set(key, t.runId);
+      this.dismissed.set(key, `${t.runId}|${t.status}`);
       return { ok: true };
     }
     const args = { threadId: t.id, action, ...(t.isLocal ? {} : { environmentId: t.envId }) };

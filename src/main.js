@@ -27,7 +27,7 @@ const ASSETS = path.join(__dirname, '..', 'assets');
 const ICON = path.join(ASSETS, 'icon.png');
 
 const DEFAULTS = {
-  petId: '',
+  petId: 'dut',          // the bundled default pet
   scale: 0.6,
   motion: 'calm',          // calm: play each mood slowly, then rest in that pose; lively: loop nonstop
   normalizeSize: true,     // scale every animation row to the idle row's size
@@ -208,6 +208,12 @@ function createPetWindow() {
   petWin.setAlwaysOnTop(true, 'floating');
   if (IS_MAC) petWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   petWin.setIgnoreMouseEvents(true, { forward: true });
+  if (process.env.T3PET_DEBUG) {
+    petWin.webContents.on('console-message', (e) => console.log('[pet]', e.level, e.message, e.sourceId ? `${path.basename(e.sourceId)}:${e.lineNumber}` : ''));
+    petWin.webContents.on('render-process-gone', (_e, d) => console.log('[pet] renderer gone', JSON.stringify(d)));
+  }
+  petWin.webContents.on('render-process-gone', () => setTimeout(recreatePetWindow, 500));
+  petWin.on('unresponsive', () => setTimeout(recreatePetWindow, 500));
   petWin.loadFile(path.join(__dirname, 'renderer', 'pet.html'));
   petWin.once('ready-to-show', () => {
     petWin.showInactive();
@@ -339,7 +345,8 @@ function trayMenu() {
     { label: 'Switch pet', submenu: pets.length ? pets.map(p => ({ label: p.displayName, type: 'radio', checked: !!cur && p.id === cur.id, click: () => setPet(p.id) })) : [{ label: 'No pets yet', enabled: false }] },
     { label: 'Open T3 Code', click: focusT3 },
     { type: 'separator' },
-    { label: petWin && petWin.isVisible() ? 'Hide pet' : 'Show pet', click: togglePet },
+    { label: petVisible() ? 'Hide pet' : 'Show pet', click: togglePet },
+    { label: 'Bring pet back', click: resetPet },
     { label: Date.now() < mutedUntil ? 'Unmute notifications' : 'Mute notifications for 1 hour', click: () => { mutedUntil = Date.now() < mutedUntil ? 0 : Date.now() + 3600e3; tray.setContextMenu(trayMenu()); } },
     { label: 'Settings', click: () => openPanel('settings') },
     { type: 'separator' },
@@ -349,11 +356,39 @@ function trayMenu() {
 function updateTray(mood) {
   if (tray) tray.setToolTip(`T3 Pet: ${mood.label}`);
 }
-function togglePet() {
-  if (!petWin) createPetWindow();
-  else if (petWin.isVisible()) petWin.hide();
-  else petWin.showInactive();
+function petVisible() {
+  return !!(petWin && !petWin.isDestroyed() && petWin.isVisible());
+}
+function setPetVisible(show) {
+  if (show) {
+    if (!petWin || petWin.isDestroyed()) createPetWindow();
+    else petWin.showInactive();
+  } else if (petWin && !petWin.isDestroyed()) {
+    petWin.hide();
+  }
+  settings.petHidden = !show;
+  saveSettings();
   if (tray) tray.setContextMenu(trayMenu());
+  send(panelWin, 'pet:visibility', { visible: show });
+}
+function togglePet() {
+  setPetVisible(!petVisible());
+}
+/** Move the pet back to the bottom-right corner of the primary screen, rebuild its window, and show it. */
+function resetPet() {
+  settings.position = null;
+  saveSettings();
+  recreatePetWindow();
+  setPetVisible(true);
+}
+/** Rebuild the pet window, e.g. after its renderer or the GPU process died (it would stay open but blank). */
+function recreatePetWindow() {
+  if (petWin && !petWin.isDestroyed()) {
+    petWin.removeAllListeners('closed');
+    petWin.destroy();
+  }
+  petWin = null;
+  if (!settings.petHidden) createPetWindow();
 }
 function setPet(id) {
   settings.petId = id;
@@ -385,6 +420,9 @@ ipcMain.on('t3:focus', () => focusT3());
 ipcMain.on('t3:openThread', (_e, key) => { if (typeof key === 'string') openThread(key); });
 ipcMain.on('panel:pin', (_e, pinned) => { panelPinned = !!pinned; });
 ipcMain.on('panel:close', () => { if (panelWin) panelWin.hide(); });
+ipcMain.handle('pet:visibility', () => ({ visible: petVisible() }));
+ipcMain.handle('pet:setVisible', (_e, show) => { setPetVisible(!!show); return { visible: petVisible() }; });
+ipcMain.handle('pet:reset', () => { resetPet(); return { visible: petVisible() }; });
 ipcMain.handle('thread:action', async (_e, { key, action }) => {
   try {
     await tasks.act(String(key), String(action));
@@ -456,7 +494,8 @@ function setLoginItem(on) {
 // Windows shows toasts reliably for an unpackaged app only with a Start Menu shortcut carrying our app id.
 function ensureWindowsShortcut() {
   if (!IS_WIN || app.isPackaged) return; // the installer creates its own shortcut with the same app id
-  const lnk = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'T3 Pet.lnk');
+  // A separate "(dev)" shortcut, so running from source never overwrites the installed app's shortcut.
+  const lnk = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'T3 Pet (dev).lnk');
   try {
     shell.writeShortcutLink(lnk, fs.existsSync(lnk) ? 'replace' : 'create', {
       target: process.execPath,
@@ -470,6 +509,8 @@ function ensureWindowsShortcut() {
 }
 
 app.on('second-instance', () => openPanel('tasks'));
+// A GPU process crash can leave transparent windows blank: rebuild the pet window when it happens.
+app.on('child-process-gone', (_e, d) => { if (d && d.type === 'GPU') setTimeout(recreatePetWindow, 800); });
 app.on('window-all-closed', () => { /* keep running in the tray */ });
 
 app.whenReady().then(() => {
@@ -479,7 +520,7 @@ app.whenReady().then(() => {
   tray = new Tray(trayImage());
   tray.setContextMenu(trayMenu());
   if (!IS_MAC) tray.on('click', () => togglePanel('tasks'));
-  createPetWindow();
+  if (!settings.petHidden) createPetWindow();
   startPolling();
   // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
   // `--test-notification` shows one sample notification (to check OS notification permissions).

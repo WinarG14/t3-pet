@@ -5,6 +5,8 @@ const os = require('os');
 
 const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
 const CODEX_PETS = path.join(CODEX_HOME, 'pets');
+// Pets shipped with the app (Dut is the default). A Codex pet with the same id takes priority.
+const BUNDLED_PETS = path.join(__dirname, '..', 'assets', 'pets');
 
 // Codex pet atlas contract (from the hatch-pet skill: references/animation-rows.md).
 const ATLAS = {
@@ -41,7 +43,7 @@ function readPet(dir) {
 }
 
 function listPets(extraDirs = []) {
-  const roots = [CODEX_PETS, ...extraDirs];
+  const roots = [CODEX_PETS, ...extraDirs, BUNDLED_PETS];
   const seen = new Map();
   for (const root of roots) {
     let entries = [];
@@ -55,4 +57,4 @@ function listPets(extraDirs = []) {
   return [...seen.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-module.exports = { listPets, readPet, ATLAS, CODEX_HOME, CODEX_PETS };
+module.exports = { listPets, readPet, ATLAS, CODEX_HOME, CODEX_PETS, BUNDLED_PETS };

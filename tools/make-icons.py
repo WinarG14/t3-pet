@@ -1,78 +1,114 @@
-"""Draw T3 Pet's app and tray icons (original artwork). Run: python tools/make-icons.py"""
+"""Build T3 Pet's app and tray icons from the logo artwork in assets/brand/logo-source.png.
+
+The source is the generated logo (a chrome cat head on a black rounded tile, on a light background).
+This script trims it to the tile, gives it clean transparent rounded corners, and writes:
+  assets/icon-1024.png, assets/icon.png (512), assets/icon.ico (16-256),
+  assets/trayTemplate.png / @2x (macOS menu bar: black cat silhouette on transparent).
+Run: python tools/make-icons.py
+"""
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-OUT = Path(__file__).resolve().parent.parent / "assets"
-OUT.mkdir(exist_ok=True)
-S = 1024
-
-
-def lerp(a, b, t):
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
+ROOT = Path(__file__).resolve().parent.parent
+SRC = ROOT / "assets" / "brand" / "logo-source.png"
+OUT = ROOT / "assets"
 
 
-def app_icon():
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    # rounded-square background with a diagonal violet-to-blue gradient
-    grad = Image.new("RGBA", (S, S))
-    gd = ImageDraw.Draw(grad)
-    top, bottom = (151, 128, 255, 255), (86, 120, 255, 255)
-    for y in range(S):
-        gd.line([(0, y), (S, y)], fill=lerp(top, bottom, y / S))
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([40, 40, S - 40, S - 40], radius=230, fill=255)
-    img.paste(grad, (0, 0), mask)
-
-    d = ImageDraw.Draw(img)
-    white = (255, 255, 255, 255)
-    ink = (38, 30, 82, 255)
-    # soft shadow under the face
-    sh = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).ellipse([250, 330, 774, 830], fill=(20, 14, 60, 90))
-    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(28)), (0, 18))
-    # ears
-    d.polygon([(285, 470), (330, 230), (470, 360)], fill=white)
-    d.polygon([(739, 470), (694, 230), (554, 360)], fill=white)
-    d.polygon([(318, 420), (342, 300), (420, 372)], fill=(255, 196, 214, 255))
-    d.polygon([(706, 420), (682, 300), (604, 372)], fill=(255, 196, 214, 255))
-    # head
-    d.ellipse([250, 320, 774, 810], fill=white)
-    # eyes
-    d.ellipse([382, 520, 452, 610], fill=ink)
-    d.ellipse([572, 520, 642, 610], fill=ink)
-    d.ellipse([404, 536, 428, 562], fill=white)
-    d.ellipse([594, 536, 618, 562], fill=white)
-    # nose and smile
-    d.polygon([(492, 640), (532, 640), (512, 664)], fill=(240, 120, 150, 255))
-    d.arc([452, 640, 512, 700], start=20, end=160, fill=ink, width=12)
-    d.arc([512, 640, 572, 700], start=20, end=160, fill=ink, width=12)
-    # cheeks
-    d.ellipse([330, 630, 390, 670], fill=(255, 196, 214, 200))
-    d.ellipse([634, 630, 694, 670], fill=(255, 196, 214, 200))
-    # status dot (a little "something needs you" badge)
-    d.ellipse([690, 170, 860, 340], fill=(245, 165, 36, 255), outline=white, width=22)
-
-    img.resize((512, 512), Image.LANCZOS).save(OUT / "icon.png")
-    img.save(OUT / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    img.resize((1024, 1024), Image.LANCZOS).save(OUT / "icon-1024.png")
+def squircle_mask(size, radius_ratio=0.225, supersample=4):
+    s = size * supersample
+    m = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, s - 1, s - 1], radius=int(s * radius_ratio), fill=255)
+    return m.resize((size, size), Image.LANCZOS)
 
 
-def tray_template():
-    # macOS menu-bar template image: black shape on transparent; the OS recolours it.
+def tile_from_source(src):
+    rgb = src.convert("RGB")
+    # The tile is the dark/grey area on a near-white background: find its bounding box.
+    bg = Image.new("RGB", rgb.size, (255, 255, 255))
+    diff = ImageChops.difference(rgb, bg).convert("L").point(lambda v: 255 if v > 40 else 0)
+    box = diff.getbbox()
+    tile = rgb.crop(box)
+    side = max(tile.size)
+    sq = Image.new("RGB", (side, side), (0, 0, 0))
+    sq.paste(tile, ((side - tile.width) // 2, (side - tile.height) // 2))
+    # Inset a little so the generated soft rim is replaced by our own clean edge.
+    inset = int(side * 0.03)
+    sq = sq.crop((inset, inset, side - inset, side - inset)).resize((1024, 1024), Image.LANCZOS)
+    out = sq.convert("RGBA")
+    out.putalpha(squircle_mask(1024))
+    return out
+
+
+def largest_component(mask):
+    """Keep the biggest connected light region (the cat), dropping stray highlight lines."""
+    small = mask.resize((256, 256), Image.NEAREST)
+    w, h = small.size
+    px = small.load()
+    seen = bytearray(w * h)
+    best = []
+    for sy in range(h):
+        for sx in range(w):
+            if px[sx, sy] < 128 or seen[sy * w + sx]:
+                continue
+            stack, comp = [(sx, sy)], []
+            seen[sy * w + sx] = 1
+            while stack:
+                x, y = stack.pop()
+                comp.append((x, y))
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx] and px[nx, ny] >= 128:
+                        seen[ny * w + nx] = 1
+                        stack.append((nx, ny))
+            if len(comp) > len(best):
+                best = comp
+    keep = Image.new("L", (w, h), 0)
+    kp = keep.load()
+    for x, y in best:
+        kp[x, y] = 255
+    # fill the eye/mouth holes back in only where they were holes inside the kept shape's bbox: keep holes
+    keep = keep.resize(mask.size, Image.NEAREST).filter(ImageFilter.MaxFilter(5))
+    return ImageChops.multiply(mask, keep)
+
+
+def tray_template(tile):
+    """Light (chrome) pixels inside the tile = the cat. Eyes stay as holes. Excludes the amber dot."""
+    rgb = tile.convert("RGB")
+    w, h = rgb.size
+    mask = Image.new("L", (w, h), 0)
+    px = rgb.load()
+    mp = mask.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b = px[x, y]
+            light = (r + g + b) / 3
+            amber = r > 180 and b < 120 and r - b > 90
+            if light > 110 and not amber:
+                mp[x, y] = 255
+    # keep the main shape only: drop thin rim highlights near the tile edge
+    edge = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(edge).rounded_rectangle([int(w * .06), int(h * .06), int(w * .94), int(h * .94)], radius=int(w * .2), fill=255)
+    mask = ImageChops.multiply(mask, edge).filter(ImageFilter.MedianFilter(5))
+    mask = largest_component(mask)
+    box = mask.getbbox()
+    glyph = mask.crop(box)
+    side = int(max(glyph.size) * 1.08)
+    canvas = Image.new("L", (side, side), 0)
+    canvas.paste(glyph, ((side - glyph.width) // 2, (side - glyph.height) // 2))
     for size, name in ((16, "trayTemplate.png"), (32, "trayTemplate@2x.png")):
-        big = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-        d = ImageDraw.Draw(big)
-        black = (0, 0, 0, 255)
-        d.polygon([(200, 470), (250, 140), (430, 330)], fill=black)
-        d.polygon([(824, 470), (774, 140), (594, 330)], fill=black)
-        d.ellipse([170, 280, 854, 900], fill=black)
-        clear = (0, 0, 0, 0)
-        d.ellipse([350, 540, 450, 660], fill=clear)
-        d.ellipse([574, 540, 674, 660], fill=clear)
-        big.resize((size, size), Image.LANCZOS).save(OUT / name)
+        a = canvas.resize((size, size), Image.LANCZOS)
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        img.putalpha(a)
+        img.save(OUT / name)
+
+
+def main():
+    tile = tile_from_source(Image.open(SRC))
+    tile.save(OUT / "icon-1024.png")
+    tile.resize((512, 512), Image.LANCZOS).save(OUT / "icon.png")
+    tile.save(OUT / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    tray_template(tile)
+    print("icons written to", OUT)
 
 
 if __name__ == "__main__":
-    app_icon()
-    tray_template()
-    print("icons written to", OUT)
+    main()

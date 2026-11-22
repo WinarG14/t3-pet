@@ -100,6 +100,7 @@ html, body {
   opacity: 0; pointer-events: none; transition: opacity .12s;
 }
 #bubble .row:hover .qa { opacity: 1; pointer-events: auto; }
+#bubble .row:hover .t { padding-right: 58px; box-sizing: border-box; }
 #bubble .qa button {
   width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 6px;
   background: transparent; color: var(--bubble-muted); cursor: pointer;

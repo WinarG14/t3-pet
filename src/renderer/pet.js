@@ -172,7 +172,8 @@ function esc(s) {
 }
 
 // Quick actions on finished rows: settle (needs thread actions on) and hide from the pet.
-const QUICK = ['done', 'stopped', 'failed', 'needs-reply'];
+// Every listed row gets them: T3 applies a settle on a running thread when its turn ends.
+const QUICK = ['done', 'stopped', 'failed', 'needs-reply', 'running', 'stale', 'waiting'];
 function rowHtml(key, state, title, detail, label, machine) {
   const icons = window.ICONS || {};
   const quick = QUICK.includes(state)
@@ -349,7 +350,8 @@ bubble.addEventListener('click', async e => {
     btn.disabled = false;
     if (r.ok) {
       row.classList.add('gone');
-      note(btn.dataset.act === 'settle' ? 'Settled' : 'Hidden until it changes', 'ok');
+      const runningRow = /\b(running|stale|waiting)\b/.test(row.className);
+      note(btn.dataset.act === 'settle' ? (runningRow ? 'Will settle when this turn ends' : 'Settled') : 'Hidden until it changes', 'ok');
     } else if (r.needsActions) {
       note('Turn on thread actions in the panel’s Settings to settle from here.', 'error');
     } else {

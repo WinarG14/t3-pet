@@ -7,6 +7,18 @@ if ((params.get('platform') || window.pet.platform) === 'darwin') document.body.
 
 // ---------- header ----------
 $('#openT3').innerHTML = ico('external');
+// show / hide the pet from the panel (also in the tray menu)
+let petShown = true;
+function applyPetVisibility(v) {
+  petShown = !!v.visible;
+  $('#petBtn').innerHTML = ico(petShown ? 'paw' : 'eyeOff');
+  $('#petBtn').title = petShown ? 'Hide the pet' : 'Show the pet';
+  $('#petBtn').classList.toggle('on', !petShown);
+  if ($('#showPet')) $('#showPet').checked = petShown;
+}
+$('#petBtn').addEventListener('click', async () => applyPetVisibility(await window.pet.setPetVisible(!petShown)));
+window.pet.onPetVisibility(applyPetVisibility);
+window.pet.petVisibility().then(applyPetVisibility);
 $('#pinBtn').innerHTML = ico('pin');
 $('#closeBtn').innerHTML = ico('close');
 let pinned = false;
@@ -95,9 +107,10 @@ function taskParts(t, multiEnv) {
   const finished = ['done', 'stopped', 'failed', 'needs-reply', 'idle'].includes(t.state);
   const acts = [
     ['open', 'external', 'Open in T3'],
-    ...(finished ? [['settle', 'check', 'Settle (mark as handled)'], ['mark_unread', 'unread', 'Mark unread']] : []),
+    ['settle', 'check', finished ? 'Settle (mark as handled)' : 'Settle when this turn ends'],
+    ...(finished ? [['mark_unread', 'unread', 'Mark unread']] : []),
     ['snooze', 'snooze', 'Snooze for 1 hour'],
-    ...(['done', 'stopped', 'failed', 'needs-reply'].includes(t.state) ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
+    ...(t.state !== 'idle' ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
   ];
   return {
     cls: `task ${t.state}`,
@@ -401,6 +414,8 @@ for (const k of TEXT) $('#' + k).addEventListener('change', e => save({ [k]: e.t
 for (const k of NUM) $('#' + k).addEventListener('change', e => save({ [k]: Number(e.target.value) }));
 $('#dataSource').addEventListener('change', e => save({ dataSource: e.target.value }));
 $('#scale').addEventListener('input', e => save({ scale: Number(e.target.value) }));
+$('#showPet').addEventListener('change', async e => applyPetVisibility(await window.pet.setPetVisible(e.target.checked)));
+$('#resetPet').addEventListener('click', async () => { applyPetVisibility(await window.pet.resetPet()); say('The pet is back in the bottom-right corner.', 'ok'); });
 for (const id of ['sound', 'autoFallback', 'openAtLogin', 'normalizeSize']) $('#' + id).addEventListener('change', e => save({ [id]: e.target.checked }));
 $('#motionSeg').addEventListener('click', e => {
   const b = e.target.closest('button[data-v]');

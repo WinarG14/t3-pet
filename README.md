@@ -52,7 +52,7 @@ Build the installers yourself with `npm run dist:win` (on Windows) or `npm run d
 they land in `dist/`.
 
 Works on **Windows** and **macOS**. On first start T3 Pet asks T3 for a read-only sign-in (no prompt;
-see below) and shows a placeholder pet until you add or hatch one.
+see below) and greets you with **Dut**, the default pet.
 
 - **Windows:** the first start adds a *T3 Pet* Start Menu shortcut; Windows needs it to show
   notifications under the app's name.
@@ -65,7 +65,8 @@ see below) and shows a placeholder pet until you add or hatch one.
   - **Menu bar icon behind the notch.** On a MacBook with a camera notch and a full menu bar, macOS
     can hide the icon behind the notch. Right-click the pet for the same menu.
 
-To start it with your computer: Settings → *Start when I sign in*. On macOS, when you run from
+To start it with your computer: Settings → *Start when I sign in*. Lost the pet? Click the paw in the
+panel's header, or Settings → *Bring pet back* (also in the tray / menu bar menu). On macOS, when you run from
 source, this adds `~/Library/LaunchAgents/dev.t3pet.desktop.plist`, and macOS shows a one-time
 "App Background Activity" notice for *Electron*. Turn the setting off to remove the file.
 
@@ -107,9 +108,11 @@ panel can only send the fixed actions listed above. *Turn off* revokes it.
 
 ## Pets
 
+T3 Pet ships with **Dut**, a chubby white-and-brown tabby, as the default pet (`assets/pets/dut`).
+
 A pet is a folder with `pet.json` and an 8×9 sprite sheet (`1536×1872`, cells of `192×208`), the
-Codex pet format. T3 Pet reads `~/.codex/pets/` (or `$CODEX_HOME/pets/`). Drop a pet folder there, or
-hatch one. Version 2 pets (8×11, `1536×2288`, two extra rows of look directions) work too; T3 Pet
+Codex pet format. T3 Pet reads `~/.codex/pets/` (or `$CODEX_HOME/pets/`) plus its bundled pets; a
+Codex pet with the same id wins. Drop a pet folder there, or hatch one. Version 2 pets (8×11, `1536×2288`, two extra rows of look directions) work too; T3 Pet
 uses their first 9 rows. With a version 2 `hatch-pet` skill, the FAL and Venice route still makes a
 standard 8×9 pet: it skips the look-direction images.
 
@@ -146,7 +149,7 @@ API keys are stored encrypted by the OS (Windows DPAPI, macOS Keychain). FAL and
 npm run check          # state rules + database fallback, against synthetic data
 npm run snapshot       # print what the pet sees now (uses a temporary read-only session, then revokes it)
 npm run test:pipeline  # offline pet build: synthetic images through the real hatch-pet scripts
-npm run icons          # redraw the app and tray icons (Python + Pillow)
+npm run icons          # rebuild the app and tray icons from assets/brand/logo-source.png (Python + Pillow)
 ```
 
 ```text
@@ -169,6 +172,8 @@ tools/                 checks, probes, icon generator
 - It writes nothing to T3 except the thread actions you click, and the sign-ins described above.
 
 ## Credits
+
+- Logo and the default pet Dut were made with GPT image models (logo: GPT Image 2.6 via Venice).
 
 - [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools.
 - The Codex pet format and the `hatch-pet` skill come from OpenAI Codex.
