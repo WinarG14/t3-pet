@@ -39,7 +39,8 @@ see below) and shows a placeholder pet until you add or hatch one.
 - **Windows:** the first start adds a *T3 Pet* Start Menu shortcut; Windows needs it to show
   notifications under the app's name.
 - **macOS:** T3 Pet lives in the menu bar (no Dock icon). Its sign-ins and API keys are kept
-  encrypted with a Keychain item named *T3 Pet Safe Storage*.
+  encrypted with a Keychain item named *T3 Pet Safe Storage*. macOS may ask once for Keychain access,
+  for example after Electron is reinstalled.
   - **No system notifications when you run from source.** macOS delivers notifications only from a
     code-signed app, and `npm start` runs Electron's development build, which is not signed. Nothing
     shows and nothing asks for permission. The pet's speech bubble and badge still show every update.
