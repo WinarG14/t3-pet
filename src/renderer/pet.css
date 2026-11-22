@@ -1,0 +1,93 @@
+:root {
+  --bubble-bg: rgba(24, 26, 33, 0.94);
+  --bubble-fg: #eceef4;
+  --bubble-muted: #9aa0ae;
+  --bubble-border: rgba(255, 255, 255, 0.10);
+  --hover: rgba(255, 255, 255, 0.06);
+  --need: #f5a524;
+  --fail: #f87171;
+  --run: #4ea1ff;
+  --done: #34d399;
+  --idle: #7c8291;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bubble-bg: rgba(255, 255, 255, 0.97);
+    --bubble-fg: #151821;
+    --bubble-muted: #5f6676;
+    --bubble-border: rgba(16, 24, 40, 0.12);
+    --hover: rgba(16, 24, 40, 0.05);
+  }
+}
+[hidden] { display: none !important; }
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  background: transparent; overflow: hidden;
+  font: 12px/1.4 "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  user-select: none; -webkit-font-smoothing: antialiased;
+}
+#stage {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-end;
+  padding: 0 8px 4px 8px; box-sizing: border-box;
+}
+#bubble {
+  width: 272px; max-height: 290px; overflow: hidden; margin-bottom: 8px; margin-right: 2px; box-sizing: border-box;
+  background: var(--bubble-bg); color: var(--bubble-fg);
+  border: 1px solid var(--bubble-border); border-radius: 16px;
+  padding: 10px 10px 8px; position: relative; cursor: pointer;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38), 0 2px 6px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(14px);
+  transition: opacity .18s ease, transform .18s ease;
+  transform-origin: 82% 100%;
+}
+#bubble::after {
+  content: ""; position: absolute; right: 48px; bottom: -7px;
+  width: 12px; height: 12px; background: var(--bubble-bg);
+  border-right: 1px solid var(--bubble-border); border-bottom: 1px solid var(--bubble-border);
+  transform: rotate(45deg); border-bottom-right-radius: 3px;
+}
+#bubble.hidden { opacity: 0; transform: translateY(8px) scale(.96); pointer-events: none; }
+#bubble .head { display: flex; align-items: center; gap: 7px; font-weight: 650; font-size: 12.5px; padding: 0 4px 4px; }
+#bubble .mood { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+#bubble .mood.waiting { background: var(--need); box-shadow: 0 0 0 3px rgba(245, 165, 36, .22); animation: pulse 1.6s infinite; }
+#bubble .mood.failed { background: var(--fail); }
+#bubble .mood.running { background: var(--run); animation: pulse 1.6s infinite; }
+#bubble .mood.review { background: var(--done); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+#bubble .row {
+  display: flex; gap: 8px; align-items: flex-start; padding: 6px 6px; border-radius: 10px;
+}
+#bubble .row:hover { background: var(--hover); }
+#bubble .row .dot { flex: 0 0 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--idle); }
+#bubble .row.waiting .dot, #bubble .row.needs-reply .dot { background: var(--need); }
+#bubble .row.failed .dot { background: var(--fail); }
+#bubble .row.running .dot, #bubble .row.stale .dot { background: var(--run); }
+#bubble .row.done .dot, #bubble .row.stopped .dot { background: var(--done); }
+#bubble .txt { min-width: 0; }
+#bubble .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 228px; }
+#bubble .d { color: var(--bubble-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#bubble .d.solo { padding: 0 4px 2px; }
+#bubble .more { color: var(--bubble-muted); padding: 4px 6px 0; font-size: 11.5px; }
+#petwrap { position: relative; }
+#sprite {
+  background-repeat: no-repeat; cursor: grab;
+  transform-origin: 50% 100%; transition: transform .25s ease;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.28));
+}
+#sprite.dragging { cursor: grabbing; }
+#sprite.nopet {
+  width: 84px; height: 84px; border-radius: 42% 42% 46% 46%;
+  background: radial-gradient(circle at 35% 30%, #c4b8ff, #8b7cf6 55%, #6d5ce8);
+  box-shadow: inset -6px -8px 0 rgba(0,0,0,.12);
+}
+#badge {
+  position: absolute; top: 2px; right: 0; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 10px; background: var(--need); color: #1d1300; font-weight: 800; font-size: 11px;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.35); pointer-events: none;
+  animation: pop .25s ease-out;
+}
+#badge.failed { background: var(--fail); color: #fff; }
+#badge.hidden { display: none; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }

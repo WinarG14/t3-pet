@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>T3 Pet</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div class="shell" id="shell">
+  <header class="top">
+    <div class="avatar"><div id="avatar"></div></div>
+    <div class="headline">
+      <div class="title"><span id="petName">T3 Pet</span></div>
+      <div class="sub" id="moodLine">Looking for T3…</div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="openT3" title="Open T3 Code"></button>
+      <button class="icon-btn" id="pinBtn" title="Keep this panel open"></button>
+      <button class="icon-btn" id="closeBtn" title="Close"></button>
+    </div>
+  </header>
+
+  <main id="views">
+    <!-- TASKS -->
+    <section class="view" data-view="tasks">
+      <div class="chips" id="chips"></div>
+      <div class="notice" id="notice" hidden></div>
+      <div class="actions-banner" id="actionsBanner" hidden>
+        <div><strong>Turn on thread actions?</strong><span>Settle, mark unread and snooze threads from the pet. T3 Pet signs in to T3 with full access; you can revoke it in T3 → Settings → Sharing &amp; access.</span></div>
+        <div class="row-end"><button class="btn ghost" id="bannerLater">Not now</button><button class="btn primary" id="bannerEnable">Turn on</button></div>
+      </div>
+      <div id="taskList" class="task-list"></div>
+      <div class="empty" id="empty" hidden>
+        <div id="emptyPet"></div>
+        <h3>All caught up</h3>
+        <p>Nothing is running or waiting for you.</p>
+      </div>
+      <details class="quiet" id="quiet"><summary><span>Recent quiet threads</span><span class="count" id="quietCount"></span></summary><div id="quietList" class="task-list"></div></details>
+      <p class="foot" id="foot"></p>
+    </section>
+
+    <!-- PETS -->
+    <section class="view" data-view="pets" hidden>
+      <div class="section-head"><h2>Your pets</h2><button class="btn ghost small" id="openPets"></button></div>
+      <p class="muted small">Any Codex-compatible pet works: a folder with <code>pet.json</code> and an 8×9 <code>spritesheet.webp</code>.</p>
+      <div class="pet-grid" id="petGrid"></div>
+    </section>
+
+    <!-- BUILD -->
+    <section class="view" data-view="build" hidden>
+      <div class="section-head"><h2>Hatch a new pet</h2></div>
+      <form id="buildForm" class="card form">
+        <label class="field"><span>Name</span><input name="name" required maxlength="40" placeholder="Pixel"></label>
+        <label class="field"><span>What should it look like?</span><textarea name="notes" rows="3" placeholder="A small orange fox in a green hoodie with a round, friendly face"></textarea></label>
+        <label class="field"><span>One-line description <em>optional</em></span><input name="description" maxlength="140"></label>
+        <div class="field"><span>Style</span>
+          <div class="seg wrap" id="styleSeg">
+            <button type="button" data-v="auto" class="on">Auto</button><button type="button" data-v="pixel">Pixel</button><button type="button" data-v="plush">Plush</button><button type="button" data-v="clay">Clay</button><button type="button" data-v="sticker">Sticker</button><button type="button" data-v="flat-vector">Vector</button><button type="button" data-v="3d-toy">3D toy</button><button type="button" data-v="painterly">Painterly</button>
+          </div>
+        </div>
+        <label class="field"><span>Image engine</span>
+          <select name="provider">
+            <option value="auto">Codex first, then FAL, then Venice</option>
+            <option value="codex">Codex only</option>
+            <option value="fal">FAL only (GPT Image edit)</option>
+            <option value="venice">Venice only (GPT Image edit)</option>
+          </select>
+        </label>
+        <div class="ref" id="refBox">
+          <span class="ref-icon"></span>
+          <div class="ref-text"><strong id="refName">Reference image</strong><span class="muted small">Optional. The pet will follow its look.</span></div>
+          <button type="button" class="btn ghost small" id="pickRef">Choose…</button>
+          <button type="button" class="btn ghost small" id="clearRef" hidden>Clear</button>
+        </div>
+        <p class="muted small">A pet is 10 images: a main look and 9 poses. Codex uses your Codex plan; FAL and Venice charge per image.</p>
+        <div class="row-end">
+          <button type="button" class="btn danger" id="cancelBtn" hidden>Cancel</button>
+          <button type="submit" class="btn primary" id="buildBtn">Hatch pet</button>
+        </div>
+      </form>
+      <div id="buildStatus" class="card" hidden>
+        <div class="status-line"><span class="spinner" id="bSpin"></span><strong id="bStep"></strong></div>
+        <div class="muted small" id="bProv"></div>
+        <div class="bar"><div id="bBar"></div></div>
+        <div id="bResult"></div>
+        <details><summary>Build log</summary><pre id="bLog"></pre></details>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" data-view="settings" hidden>
+      <div class="card">
+        <h3><span id="icoLink"></span>Connection</h3>
+        <div id="connInfo" class="muted small"></div>
+      </div>
+      <div class="card">
+        <h3><span id="icoShield"></span>Thread actions</h3>
+        <p class="muted small">Lets the pet settle, mark unread and snooze threads. T3 Pet signs in to T3 at full access, because T3 only lets a caller organize threads that run at or below its own level. The sign-in lasts 30 days and shows in T3 → Settings → Sharing &amp; access.</p>
+        <div class="row-end" id="actionsRow"></div>
+      </div>
+      <div class="card">
+        <h3><span id="icoBell"></span>Notifications</h3>
+        <label class="switch"><input type="checkbox" data-notify="waiting"><i></i>Needs my decision</label>
+        <label class="switch"><input type="checkbox" data-notify="needs-reply"><i></i>Finished with a question for me</label>
+        <label class="switch"><input type="checkbox" data-notify="done"><i></i>Task finished</label>
+        <label class="switch"><input type="checkbox" data-notify="failed"><i></i>Task failed</label>
+        <label class="switch"><input type="checkbox" id="sound"><i></i>Play a sound</label>
+      </div>
+      <div class="card">
+        <h3><span id="icoPaw"></span>Pet</h3>
+        <div class="field"><span>Motion</span><div class="seg" id="motionSeg"><button type="button" data-v="calm">Calm</button><button type="button" data-v="lively">Lively</button></div></div>
+        <label class="field"><span>Size</span><input type="range" id="scale" min="0.35" max="1" step="0.05"></label>
+        <label class="switch"><input type="checkbox" id="normalizeSize"><i></i>Same size in every pose</label>
+        <label class="switch"><input type="checkbox" id="openAtLogin"><i></i>Start when I sign in</label>
+      </div>
+      <div class="card">
+        <h3><span id="icoKey"></span>Image engines</h3>
+        <label class="switch"><input type="checkbox" id="autoFallback"><i></i>If Codex can't make images, use FAL, then Venice</label>
+        <div class="field"><span>FAL API key <b class="keystate" id="falState"></b></span><div class="keyrow"><input type="password" id="falKey" placeholder="Paste to save (stored encrypted)"><button class="btn ghost small" data-savekey="fal">Save</button><button class="btn ghost small" data-clearkey="fal">Remove</button></div></div>
+        <div class="field"><span>Venice API key <b class="keystate" id="veniceState"></b></span><div class="keyrow"><input type="password" id="veniceKey" placeholder="Paste to save (stored encrypted)"><button class="btn ghost small" data-savekey="venice">Save</button><button class="btn ghost small" data-clearkey="venice">Remove</button></div></div>
+      </div>
+      <details class="card advanced">
+        <summary>Advanced</summary>
+        <label class="field"><span>FAL model</span><input id="falModel"></label>
+        <label class="field"><span>Venice edit model</span><input id="veniceEditModel"></label>
+        <label class="field"><span>Venice generate model</span><input id="veniceModel"></label>
+        <label class="field"><span>Codex model (blank = automatic)</span><input id="codexModel"></label>
+        <label class="field"><span>Python command</span><input id="pythonCmd"></label>
+        <label class="field"><span>T3 Code app</span><input id="t3App"></label>
+        <label class="field"><span>Check this computer every (ms)</span><input type="number" id="pollMs" min="1500" step="500"></label>
+        <label class="field"><span>Check linked machines every (ms)</span><input type="number" id="remotePollMs" min="5000" step="1000"></label>
+        <label class="field"><span>Show threads active in the last (hours)</span><input type="number" id="lookbackHours" min="1"></label>
+        <label class="field"><span>Data source</span><select id="dataSource"><option value="auto">T3 tools: this computer and linked machines</option><option value="database">This computer's T3 database only</option></select></label>
+      </details>
+      <p class="foot" id="saved"></p>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="tasks" role="tab"><span class="ti" data-icon="tasks"></span><span>Tasks</span><b class="badge" id="navBadge" hidden></b></button>
+    <button data-tab="pets" role="tab"><span class="ti" data-icon="paw"></span><span>Pets</span></button>
+    <button data-tab="build" role="tab"><span class="ti" data-icon="sparkle"></span><span>Build</span></button>
+    <button data-tab="settings" role="tab"><span class="ti" data-icon="gear"></span><span>Settings</span></button>
+  </nav>
+</div>
+<script src="icons.js"></script>
+<script src="sprite.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>

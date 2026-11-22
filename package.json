@@ -1,0 +1,40 @@
+{
+  "name": "t3-pet",
+  "version": "0.2.0",
+  "description": "A desktop pet for T3 Code: shows your running and waiting threads on every linked machine, nudges you when a task needs a decision or finishes, and hatches new Codex-compatible pets with GPT image models.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "panel": "electron . --panel",
+    "check": "node tools/electron-node.js tools/check.js",
+    "snapshot": "node tools/electron-node.js tools/snapshot.js",
+    "test:pipeline": "node tools/pipeline-test.js",
+    "icons": "python tools/make-icons.py"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.4.1"
+  },
+  "private": true,
+  "author": "WinarG14",
+  "homepage": "https://github.com/WinarG14/t3-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WinarG14/t3-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WinarG14/t3-pet/issues"
+  },
+  "keywords": [
+    "t3code",
+    "t3",
+    "codex",
+    "pet",
+    "desktop-pet",
+    "electron",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
