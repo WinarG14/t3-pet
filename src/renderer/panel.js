@@ -319,13 +319,19 @@ async function loadSettings() {
     loadSettings();
   });
   if ($('#actOff')) $('#actOff').addEventListener('click', async () => { await window.pet.disableActions(); loadSettings(); });
+  renderConnection();
+}
+function renderConnection() {
   const snap = last && last.snapshot;
   const envs = (snap && snap.environments) || [];
-  $('#connInfo').innerHTML = (snap && snap.ok)
-    ? envs.map(e => `<div class="connrow"><span class="d ${e.status === 'error' || e.status !== 'reachable' ? 'off' : ''}"></span>${esc(e.isLocal ? `${e.label} (this computer)` : `${e.label} (linked)`)}</div>`).join('') +
-      `<div class="small" style="margin-top:6px">${snap.source === 'database' ? "Reading this computer's T3 database (linked machines are not visible in this mode)." : "Reading T3 through its tools with a read-only sign-in named “T3 Pet (read-only)”."}</div>`
-    : 'T3 Code is not running.';
+  $('#connInfo').innerHTML = !snap
+    ? 'Connecting to T3…'
+    : snap.ok
+      ? envs.map(e => `<div class="connrow"><span class="d ${e.status !== 'reachable' ? 'off' : ''}"></span>${esc(e.isLocal ? `${e.label} (this computer)` : `${e.label} (linked)`)}</div>`).join('') +
+        `<div class="small" style="margin-top:6px">${snap.source === 'database' ? "Reading this computer's T3 database (linked machines are not visible in this mode)." : 'Reading T3 through its tools with a read-only sign-in named “T3 Pet (read-only)”.'}</div>`
+      : esc(snap.error || 'T3 Code is not running.');
 }
+window.pet.onTasks(() => { if (!document.querySelector('[data-view="settings"]').hidden) renderConnection(); });
 async function save(patch) {
   S = await window.pet.setSettings(patch);
   $('#saved').textContent = 'Saved ' + new Date().toLocaleTimeString();

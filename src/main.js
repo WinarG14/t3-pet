@@ -249,6 +249,10 @@ function openPanel(tab = 'tasks') {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   panelWin.setAlwaysOnTop(true, 'floating');
+  if (process.env.T3PET_DEBUG) {
+    panelWin.webContents.on('console-message', (e) => console.log('[panel]', e.level, e.message, e.sourceId ? `${path.basename(e.sourceId)}:${e.lineNumber}` : ''));
+    panelWin.on('blur', () => console.log('[panel] blur'));
+  }
   panelWin.loadFile(path.join(__dirname, 'renderer', 'panel.html'), { query: { tab, platform: process.platform } });
   panelWin.once('ready-to-show', () => { panelWin.show(); panelWin.focus(); });
   panelWin.on('blur', () => {
@@ -470,5 +474,7 @@ app.whenReady().then(() => {
   if (!IS_MAC) tray.on('click', () => togglePanel('tasks'));
   createPetWindow();
   startPolling();
-  if (process.argv.includes('--panel')) setTimeout(() => openPanel('tasks'), 600);
+  // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
+  const panelArg = process.argv.find(a => a === '--panel' || a.startsWith('--panel='));
+  if (panelArg) setTimeout(() => openPanel(panelArg.split('=')[1] || 'tasks'), 600);
 });
