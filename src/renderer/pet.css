@@ -32,7 +32,7 @@ html, body {
   padding: 0 8px 4px 8px; box-sizing: border-box;
 }
 #bubble {
-  width: 272px; max-height: 290px; overflow: hidden; margin-bottom: 8px; margin-right: 2px; box-sizing: border-box;
+  width: 272px; margin-bottom: 8px; margin-right: 2px; box-sizing: border-box;
   background: var(--bubble-bg); color: var(--bubble-fg);
   border: 1px solid var(--bubble-border); border-radius: 16px;
   padding: 10px 10px 8px; position: relative; cursor: pointer;

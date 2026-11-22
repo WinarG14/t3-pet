@@ -479,6 +479,8 @@ app.whenReady().then(() => {
   createPetWindow();
   startPolling();
   // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
+  // `--test-notification` shows one sample notification (to check OS notification permissions).
+  if (process.argv.includes('--test-notification')) setTimeout(() => toast('T3 Pet test notification', 'If you can read this, notifications work.'), 1500);
   const panelArg = process.argv.find(a => a === '--panel' || a.startsWith('--panel='));
   if (panelArg) setTimeout(() => openPanel(panelArg.split('=')[1] || 'tasks'), 600);
 });
