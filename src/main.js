@@ -209,7 +209,10 @@ function createPetWindow() {
   if (IS_MAC) petWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   petWin.setIgnoreMouseEvents(true, { forward: true });
   petWin.loadFile(path.join(__dirname, 'renderer', 'pet.html'));
-  petWin.once('ready-to-show', () => petWin.showInactive());
+  petWin.once('ready-to-show', () => {
+    petWin.showInactive();
+    if (tray) tray.setContextMenu(trayMenu()); // the menu was built while the pet was still hidden
+  });
   petWin.on('closed', () => { petWin = null; });
 }
 
