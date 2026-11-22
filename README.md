@@ -34,8 +34,9 @@ Download the latest file from [Releases](https://github.com/WinarG14/t3-pet/rele
   SmartScreen may say *Windows protected your PC*: choose **More info → Run anyway**. Uninstall it from
   Settings → Apps.
 - **macOS:** `T3-Pet-<version>-arm64.dmg` (Apple silicon) or `-x64.dmg` (Intel). Open it and drag
-  **T3 Pet** to Applications. The app is not notarized yet, so the first time **right-click → Open**.
-  T3 Pet runs in the menu bar (no Dock icon).
+  **T3 Pet** to Applications. The app is ad-hoc signed but not notarized (no paid Apple Developer ID
+  yet), so the first time **right-click → Open**. T3 Pet runs in the menu bar (no Dock icon). When macOS
+  shows the *T3 Pet Notifications* banner, choose **Allow**.
 
 ### From source
 
@@ -57,11 +58,16 @@ see below) and greets you with **Dut**, the default pet.
 - **Windows:** the first start adds a *T3 Pet* Start Menu shortcut; Windows needs it to show
   notifications under the app's name.
 - **macOS:** T3 Pet lives in the menu bar (no Dock icon). Its sign-ins and API keys are kept
-  encrypted with a Keychain item named *T3 Pet Safe Storage*. macOS may ask once for Keychain access,
-  for example after Electron is reinstalled.
-  - **No system notifications when you run from source.** macOS delivers notifications only from a
-    code-signed app, and `npm start` runs Electron's development build, which is not signed. Nothing
-    shows and nothing asks for permission. The pet's speech bubble and badge still show every update.
+  encrypted with a Keychain item named *T3 Pet Safe Storage*.
+  - **Keychain prompt after an update.** The macOS build is ad-hoc signed (free signing, no Apple
+    Developer ID), and each build has a new signature. After installing a new version, macOS may ask
+    "T3 Pet wants to use your confidential information stored in 'T3 Pet Safe Storage'". Enter your
+    login password and choose **Always Allow**. Alternatively quit T3 Pet, delete that item in Keychain
+    Access (or `security delete-generic-password -s "T3 Pet Safe Storage"`) and start it again: it
+    creates a fresh item and signs in to T3 again by itself (you lose only saved FAL/Venice keys).
+  - **Notifications need a signed app.** The installed app is signed, so notifications work after you
+    allow them. When you run from source (`npm start`), Electron's development build is unsigned and
+    macOS shows no notifications; the pet's bubble and badge still show every update.
   - **Menu bar icon behind the notch.** On a MacBook with a camera notch and a full menu bar, macOS
     can hide the icon behind the notch. Right-click the pet for the same menu.
 
