@@ -17,7 +17,7 @@ function applyPetVisibility(v) {
   if ($('#showPet')) $('#showPet').checked = petShown;
 }
 $('#petBtn').addEventListener('click', async () => {
-  applyPetVisibility(await window.pet.setPetVisible(!petShown));
+  applyPetVisibility(await window.pet.setPetVisible(!petShown, 'panel paw button'));
   if (!petShown && window.say) window.say('Pet hidden. Click the paw (or the tray menu → Show pet) to bring it back.', 'info');
 });
 window.pet.onPetVisibility(applyPetVisibility);
@@ -417,7 +417,7 @@ for (const k of TEXT) $('#' + k).addEventListener('change', e => save({ [k]: e.t
 for (const k of NUM) $('#' + k).addEventListener('change', e => save({ [k]: Number(e.target.value) }));
 $('#dataSource').addEventListener('change', e => save({ dataSource: e.target.value }));
 $('#scale').addEventListener('input', e => save({ scale: Number(e.target.value) }));
-$('#showPet').addEventListener('change', async e => applyPetVisibility(await window.pet.setPetVisible(e.target.checked)));
+$('#showPet').addEventListener('change', async e => applyPetVisibility(await window.pet.setPetVisible(e.target.checked, 'settings switch')));
 $('#resetPet').addEventListener('click', async () => { applyPetVisibility(await window.pet.resetPet()); say('The pet is back in the bottom-right corner.', 'ok'); });
 for (const id of ['sound', 'autoFallback', 'openAtLogin', 'normalizeSize']) $('#' + id).addEventListener('change', e => save({ [id]: e.target.checked }));
 $('#motionSeg').addEventListener('click', e => {

@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('pet', {
   pin: pinned => ipcRenderer.send('panel:pin', !!pinned),
   close: () => ipcRenderer.send('panel:close'),
   petVisibility: () => ipcRenderer.invoke('pet:visibility'),
-  setPetVisible: show => ipcRenderer.invoke('pet:setVisible', !!show),
+  setPetVisible: (show, source) => ipcRenderer.invoke('pet:setVisible', !!show, source || 'panel'),
   resetPet: () => ipcRenderer.invoke('pet:reset'),
   onPetVisibility: fn => on('pet:visibility', fn),
   settings: () => ipcRenderer.invoke('settings:get'),

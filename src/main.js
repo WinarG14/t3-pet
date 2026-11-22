@@ -1,6 +1,6 @@
 // T3 Pet: a desktop companion for T3 Code. Shows a Codex-compatible pet that reacts to T3 threads
 // on this computer and on every linked environment.
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, screen, safeStorage, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, screen, safeStorage, nativeImage, shell, dialog, powerMonitor } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -188,6 +188,30 @@ function openThread(key) {
   shell.openExternal(`t3code://threads/${encodeURIComponent(env)}/${encodeURIComponent(id)}`).catch(() => focusT3());
 }
 
+// ---------------- pet event log (why did the pet show / hide / move?) ----------------
+function petLog(event, detail = '') {
+  try {
+    const file = path.join(USER_DIR, 'pet-events.log');
+    const st = fs.existsSync(file) ? fs.statSync(file) : null;
+    if (st && st.size > 256 * 1024) fs.renameSync(file, file + '.old'); // keep it small
+    fs.appendFileSync(file, `${new Date().toISOString()} ${event}${detail ? ' ' + detail : ''}
+`);
+  } catch {}
+}
+
+/**
+ * Keep the pet above other windows. On Windows, showInactive() (show without stealing focus) silently
+ * drops always-on-top, so the pet ended up behind maximised windows and seemed to vanish. Re-apply it.
+ */
+function ensurePetOnTop(reason) {
+  if (!petWin || petWin.isDestroyed() || !petWin.isVisible()) return;
+  if (petWin.isAlwaysOnTop() && reason === 'check') return;
+  petWin.setAlwaysOnTop(false);
+  petWin.setAlwaysOnTop(true, 'screen-saver');
+  if (IS_MAC) petWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (reason === 'check') petLog('on-top restored', '(was dropped)');
+}
+
 // ---------------- windows ----------------
 const PET_W = 300;
 const PET_H = 420; // tall enough for the bubble; empty space is click-through
@@ -231,6 +255,7 @@ function applyPetLayout() {
   if (!petWin || petWin.isDestroyed()) return;
   const L = petLayout();
   petWin.setBounds(L.win);
+  ensurePetOnTop('check');
   send(petWin, 'pet:layout', L.sprite);
 }
 
@@ -250,12 +275,14 @@ function createPetWindow() {
     petWin.webContents.on('console-message', (e) => console.log('[pet]', e.level, e.message, e.sourceId ? `${path.basename(e.sourceId)}:${e.lineNumber}` : ''));
     petWin.webContents.on('render-process-gone', (_e, d) => console.log('[pet] renderer gone', JSON.stringify(d)));
   }
-  petWin.webContents.on('render-process-gone', () => setTimeout(recreatePetWindow, 500));
-  petWin.on('unresponsive', () => setTimeout(recreatePetWindow, 500));
+  petWin.webContents.on('render-process-gone', (_e, d) => setTimeout(() => recreatePetWindow('renderer gone: ' + (d && d.reason)), 500));
+  petWin.on('unresponsive', () => setTimeout(() => recreatePetWindow('unresponsive'), 500));
   petWin.loadFile(path.join(__dirname, 'renderer', 'pet.html'));
   petWin.webContents.on('did-finish-load', () => send(petWin, 'pet:layout', petLayout().sprite));
   petWin.once('ready-to-show', () => {
     petWin.showInactive();
+    ensurePetOnTop('shown');
+    petLog('pet shown', '(window created)');
     if (tray) tray.setContextMenu(trayMenu()); // the menu was built while the pet was still hidden
   });
   petWin.on('closed', () => { petWin = null; });
@@ -398,10 +425,11 @@ function updateTray(mood) {
 function petVisible() {
   return !!(petWin && !petWin.isDestroyed() && petWin.isVisible());
 }
-function setPetVisible(show) {
+function setPetVisible(show, source = 'unknown') {
+  petLog(show ? 'show pet' : 'hide pet', `(from ${source})`);
   if (show) {
     if (!petWin || petWin.isDestroyed()) createPetWindow();
-    else petWin.showInactive();
+    else { petWin.showInactive(); ensurePetOnTop('shown'); }
   } else if (petWin && !petWin.isDestroyed()) {
     petWin.hide();
   }
@@ -411,18 +439,20 @@ function setPetVisible(show) {
   send(panelWin, 'pet:visibility', { visible: show });
 }
 function togglePet() {
-  setPetVisible(!petVisible());
+  setPetVisible(!petVisible(), 'tray menu');
 }
 /** Move the pet back to the bottom-right corner of the primary screen, rebuild its window, and show it. */
 function resetPet() {
   settings.position = null;
   settings.petPos = null;
   saveSettings();
+  petLog('bring pet back');
   recreatePetWindow();
-  setPetVisible(true);
+  setPetVisible(true, 'bring pet back');
 }
 /** Rebuild the pet window, e.g. after its renderer or the GPU process died (it would stay open but blank). */
-function recreatePetWindow() {
+function recreatePetWindow(reason = '') {
+  if (reason) petLog('rebuild pet window', `(${reason})`);
   if (petWin && !petWin.isDestroyed()) {
     petWin.removeAllListeners('closed');
     petWin.destroy();
@@ -462,7 +492,7 @@ ipcMain.on('t3:openThread', (_e, key) => { if (typeof key === 'string') openThre
 ipcMain.on('panel:pin', (_e, pinned) => { panelPinned = !!pinned; });
 ipcMain.on('panel:close', () => { if (panelWin) panelWin.hide(); });
 ipcMain.handle('pet:visibility', () => ({ visible: petVisible() }));
-ipcMain.handle('pet:setVisible', (_e, show) => { setPetVisible(!!show); return { visible: petVisible() }; });
+ipcMain.handle('pet:setVisible', (_e, show, source) => { setPetVisible(!!show, typeof source === 'string' ? source.slice(0, 40) : 'panel'); return { visible: petVisible() }; });
 ipcMain.handle('pet:reset', () => { resetPet(); return { visible: petVisible() }; });
 ipcMain.handle('thread:action', async (_e, { key, action }) => {
   try {
@@ -552,11 +582,11 @@ function ensureWindowsShortcut() {
 
 // Opening T3 Pet again (Start Menu, Spotlight) while it runs: bring the pet back and open the panel.
 app.on('second-instance', () => {
-  if (!petVisible()) setPetVisible(true);
+  if (!petVisible()) setPetVisible(true, 'app opened again');
   openPanel('tasks');
 });
 // A GPU process crash can leave transparent windows blank: rebuild the pet window when it happens.
-app.on('child-process-gone', (_e, d) => { if (d && d.type === 'GPU') setTimeout(recreatePetWindow, 800); });
+app.on('child-process-gone', (_e, d) => { if (d && d.type === 'GPU') setTimeout(() => recreatePetWindow('GPU process gone: ' + d.reason), 800); });
 app.on('window-all-closed', () => { /* keep running in the tray */ });
 
 app.whenReady().then(() => {
@@ -569,6 +599,10 @@ app.whenReady().then(() => {
   if (!settings.petHidden) createPetWindow();
   // Screens added, removed or resized: keep the pet (and its bubble) on a visible screen.
   for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, () => applyPetLayout());
+  // Safety net: Windows can drop always-on-top (showInactive, sleep, full-screen apps). Check and repair.
+  setInterval(() => ensurePetOnTop('check'), 5000);
+  for (const ev of ['resume', 'unlock-screen']) powerMonitor.on(ev, () => setTimeout(() => ensurePetOnTop('shown'), 1000));
+  petLog('app started', `(v${app.getVersion()}, pet ${settings.petHidden ? 'hidden' : 'shown'})`);
   startPolling();
   // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
   // `--test-notification` shows one sample notification (to check OS notification permissions).
