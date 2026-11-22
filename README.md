@@ -23,8 +23,23 @@
 
 ## Install
 
-Requirements: [T3 Code](https://github.com/pingdotgg/t3code) installed and opened at least once,
-and [Node.js](https://nodejs.org) 20 or newer.
+Requirement: [T3 Code](https://github.com/pingdotgg/t3code) installed and opened at least once.
+
+### Installer (recommended)
+
+Download the latest file from [Releases](https://github.com/WinarG14/t3-pet/releases):
+
+- **Windows:** `T3-Pet-Setup-<version>.exe`. Run it; it installs for your user only (no admin rights),
+  adds Start Menu and desktop shortcuts, and starts T3 Pet. The builds are not code-signed yet, so Windows
+  SmartScreen may say *Windows protected your PC*: choose **More info → Run anyway**. Uninstall it from
+  Settings → Apps.
+- **macOS:** `T3-Pet-<version>-arm64.dmg` (Apple silicon) or `-x64.dmg` (Intel). Open it and drag
+  **T3 Pet** to Applications. The app is not notarized yet, so the first time **right-click → Open**.
+  T3 Pet runs in the menu bar (no Dock icon).
+
+### From source
+
+Needs [Node.js](https://nodejs.org) 20 or newer.
 
 ```bash
 git clone https://github.com/WinarG14/t3-pet.git
@@ -32,6 +47,9 @@ cd t3-pet
 npm install
 npm start
 ```
+
+Build the installers yourself with `npm run dist:win` (on Windows) or `npm run dist:mac` (on a Mac);
+they land in `dist/`.
 
 Works on **Windows** and **macOS**. On first start T3 Pet asks T3 for a read-only sign-in (no prompt;
 see below) and shows a placeholder pet until you add or hatch one.

@@ -92,13 +92,13 @@ function taskHtml(t, multiEnv) {
   const icon = ico(STATE_ICON[t.state] || 'dot');
   const iconCls = t.state === 'running' ? 'pulse' : (t.state === 'waiting' || t.state === 'needs-reply') ? 'pulse' : '';
   const machine = multiEnv ? `<span class="machine" title="${esc(t.isLocal ? 'This computer' : 'Linked: ' + t.envLabel)}">${ico('monitor')}${esc(t.isLocal ? THIS_MACHINE : t.envLabel)}</span>` : '';
+  // Only offer what T3 accepts for this state: a running thread has no finished run to settle or mark unread.
   const finished = ['done', 'stopped', 'failed', 'needs-reply', 'idle'].includes(t.state);
   const acts = [
     ['open', 'external', 'Open in T3'],
-    ...(finished ? [['settle', 'check', 'Settle (mark as handled)']] : []),
-    ['mark_unread', 'unread', 'Mark unread'],
-    ['snooze', 'snooze', 'Snooze 1 hour'],
-    ...(t.state !== 'idle' && t.state !== 'running' ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
+    ...(finished ? [['settle', 'check', 'Settle (mark as handled)'], ['mark_unread', 'unread', 'Mark unread']] : []),
+    ['snooze', 'snooze', 'Snooze for 1 hour'],
+    ...(['done', 'stopped', 'failed', 'needs-reply'].includes(t.state) ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
   ];
   return `<div class="task ${t.state}" data-key="${esc(t.key)}" tabindex="0" title="Open in T3">
     <div class="ic ${iconCls}">${icon}</div>
@@ -169,6 +169,23 @@ $('#chips').addEventListener('click', e => {
   render();
 });
 
+// In-panel messages. Never use alert(): a native dialog takes focus and the popover hides itself.
+let toastTimer = null;
+function say(text, kind = 'info') {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    document.querySelector('.shell').appendChild(el);
+  }
+  el.textContent = text;
+  el.className = `toast ${kind} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 6000 : 2500);
+}
+window.say = say;
+
+const DONE_TEXT = { settle: 'Settled', mark_unread: 'Marked unread', snooze: 'Snoozed for 1 hour', dismiss: 'Hidden until it changes' };
 async function doAction(key, act, cardEl) {
   if (act === 'open') return window.pet.openThread(key);
   if (cardEl) cardEl.style.opacity = '.55';
@@ -179,7 +196,8 @@ async function doAction(key, act, cardEl) {
     render();
     return;
   }
-  if (!r.ok) alert(r.error);
+  if (!r.ok) return say(r.error, 'error');
+  say(DONE_TEXT[act] || 'Done', 'ok');
 }
 
 for (const list of ['#taskList', '#quietList']) {
@@ -202,7 +220,7 @@ $('#bannerEnable').addEventListener('click', async () => {
   const r = await window.pet.enableActions();
   $('#bannerEnable').disabled = false;
   $('#bannerEnable').textContent = 'Turn on';
-  if (!r.ok) return alert(r.error);
+  if (!r.ok) return say(r.error, 'error');
   actionsHint = false;
   render();
 });
@@ -253,7 +271,7 @@ $('#buildForm').addEventListener('submit', async e => {
   const req = Object.fromEntries(new FormData(e.target).entries());
   req.reference = reference;
   req.style = style;
-  if (!req.notes && !req.description && !reference) return alert('Describe the pet or choose a reference image.');
+  if (!req.notes && !req.description && !reference) return say('Describe the pet or choose a reference image.', 'error');
   renderBuilder(await window.pet.build(req));
 });
 $('#cancelBtn').addEventListener('click', async () => renderBuilder(await window.pet.cancelBuild()));
@@ -315,7 +333,7 @@ async function loadSettings() {
   if ($('#actOn')) $('#actOn').addEventListener('click', async () => {
     $('#actOn').disabled = true;
     const r = await window.pet.enableActions();
-    if (!r.ok) alert(r.error);
+    if (!r.ok) say(r.error, 'error');
     loadSettings();
   });
   if ($('#actOff')) $('#actOff').addEventListener('click', async () => { await window.pet.disableActions(); loadSettings(); });
@@ -356,7 +374,7 @@ for (const b of document.querySelectorAll('[data-savekey]')) {
     const input = $('#' + name + 'Key');
     if (!input.value.trim()) return;
     try { await window.pet.setKey(name, input.value); input.value = ''; await loadSettings(); $('#saved').textContent = `${name.toUpperCase()} key saved (encrypted).`; }
-    catch (err) { alert(err.message); }
+    catch (err) { say(err.message, 'error'); }
   });
 }
 for (const b of document.querySelectorAll('[data-clearkey]')) {

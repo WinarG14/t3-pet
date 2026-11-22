@@ -448,7 +448,7 @@ function setLoginItem(on) {
 
 // Windows shows toasts reliably for an unpackaged app only with a Start Menu shortcut carrying our app id.
 function ensureWindowsShortcut() {
-  if (!IS_WIN) return;
+  if (!IS_WIN || app.isPackaged) return; // the installer creates its own shortcut with the same app id
   const lnk = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'T3 Pet.lnk');
   try {
     shell.writeShortcutLink(lnk, fs.existsSync(lnk) ? 'replace' : 'create', {

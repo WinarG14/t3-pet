@@ -258,7 +258,13 @@ class TaskSource {
     }
     const args = { threadId: t.id, action, ...(t.isLocal ? {} : { environmentId: t.envId }) };
     if (action === 'snooze') args.snoozedUntil = new Date(Date.now() + 3600e3).toISOString();
-    await this.client.call('t3_thread_organize', args, 'actions');
+    try {
+      await this.client.call('t3_thread_organize', args, 'actions');
+    } catch (e) {
+      if (/no completed run/i.test(e.message)) e.message = "This thread hasn't finished a run yet, so it can't be marked unread or settled.";
+      else if (/escalation|above this caller/i.test(e.message)) e.message = 'T3 refused: the pet’s sign-in has a lower access level than this thread. Turn thread actions off and on again in Settings.';
+      throw e;
+    }
     if (action === 'mark_unread') this.dismissed.delete(key);
     if (this.remote.has(t.envId)) this.remote.get(t.envId).at = 0; // refresh that machine on the next poll
     return { ok: true };

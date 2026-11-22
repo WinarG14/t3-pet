@@ -9,11 +9,14 @@
     "check": "node tools/electron-node.js tools/check.js",
     "snapshot": "node tools/electron-node.js tools/snapshot.js",
     "test:pipeline": "node tools/pipeline-test.js",
-    "icons": "python tools/make-icons.py"
+    "icons": "python tools/make-icons.py",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
   },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^45.4.1"
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
   },
   "private": true,
   "author": "WinarG14",
@@ -36,5 +39,64 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "build": {
+    "appId": "dev.t3pet.desktop",
+    "productName": "T3 Pet",
+    "copyright": "Copyright (c) 2026 WinarG14",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "T3-Pet-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "T3 Pet",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon-1024.png",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    },
+    "dmg": {
+      "artifactName": "T3-Pet-${version}-${arch}.${ext}"
+    }
   }
 }

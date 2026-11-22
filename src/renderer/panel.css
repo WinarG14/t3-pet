@@ -255,3 +255,15 @@ pre#bLog { max-height: 200px; overflow: auto; font: 11px/1.4 ui-monospace, "Casc
 .connrow { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--fg2); }
 .connrow .d { width: 8px; height: 8px; border-radius: 50%; background: var(--done); }
 .connrow .d.off { background: var(--fail); }
+
+/* in-panel message (replaces native alerts, which would steal focus and hide the popover) */
+.toast {
+  position: absolute; left: 14px; right: 14px; bottom: 74px; z-index: 5;
+  padding: 9px 12px; border-radius: 12px; font-size: 12.5px; font-weight: 550;
+  background: var(--surface3); color: var(--fg); border: 1px solid var(--border2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+  opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .18s, transform .18s;
+}
+.toast.show { opacity: 1; transform: none; }
+.toast.ok { border-color: color-mix(in srgb, var(--done) 50%, transparent); }
+.toast.error { border-color: color-mix(in srgb, var(--fail) 60%, transparent); background: color-mix(in srgb, var(--fail) 14%, var(--surface3)); }
