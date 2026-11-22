@@ -9,7 +9,7 @@ class MiniSprite {
     el.style.width = `${Math.round(atlas.cellWidth * scale)}px`;
     el.style.height = `${Math.round(atlas.cellHeight * scale)}px`;
     el.style.backgroundImage = `url("${url}")`;
-    el.style.backgroundSize = `${atlas.width * scale}px ${atlas.height * scale}px`;
+    el.style.backgroundSize = `${atlas.width * scale}px auto`; // auto height: 8x9 and 8x11 (v2) sheets
     el.style.backgroundRepeat = 'no-repeat';
     this.frame(0, 'idle');
   }
