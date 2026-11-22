@@ -65,10 +65,12 @@ see below) and greets you with **Dut**, the default pet.
   - **Menu bar icon behind the notch.** On a MacBook with a camera notch and a full menu bar, macOS
     can hide the icon behind the notch. Right-click the pet for the same menu.
 
-To start it with your computer: Settings → *Start when I sign in*. Lost the pet? Click the paw in the
-panel's header, or Settings → *Bring pet back* (also in the tray / menu bar menu). On macOS, when you run from
-source, this adds `~/Library/LaunchAgents/dev.t3pet.desktop.plist`, and macOS shows a one-time
+To start it with your computer: Settings → *Start when I sign in*. On macOS, when you run from source,
+this adds `~/Library/LaunchAgents/dev.t3pet.desktop.plist`, and macOS shows a one-time
 "App Background Activity" notice for *Electron*. Turn the setting off to remove the file.
+
+Lost the pet? Click the paw in the panel's header, or Settings → *Bring pet back* (also in the tray /
+menu bar menu).
 
 ## How it reads T3
 
