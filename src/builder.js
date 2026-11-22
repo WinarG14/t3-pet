@@ -236,7 +236,12 @@ class PetBuilder extends EventEmitter {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const saveManifest = () => fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     const done = id => manifest.jobs.find(j => j.id === id)?.status === 'complete';
-    this.set({ jobsTotal: manifest.jobs.length, jobsDone: manifest.jobs.filter(j => j.status === 'complete').length });
+    // Newer hatch-pet skills (v2, 8x11 atlas) add look-direction jobs (look-cardinals, look-row-9/10) that
+    // need a reviewed contact sheet and approved anchors first. This route builds the standard 8x9 atlas,
+    // so it runs only the base and the 9 standard rows. Older skills have no look jobs: nothing changes.
+    const jobs = manifest.jobs.filter(j => !String(j.kind || '').startsWith('look-'));
+    const completed = () => jobs.filter(j => j.status === 'complete').length;
+    this.set({ jobsTotal: jobs.length, jobsDone: completed() });
 
     // Try each provider in order for this one image: prompt, then the retry prompt, then the next provider.
     const runJob = async job => {
@@ -270,16 +275,16 @@ class PetBuilder extends EventEmitter {
       }
       Object.assign(job, { status: 'complete', source_path: `${provider}:${job.id}`, completed_at: new Date().toISOString() });
       saveManifest();
-      this.set({ jobsDone: manifest.jobs.filter(j => j.status === 'complete').length });
+      this.set({ jobsDone: completed() });
       this.log(`${job.id} done.`);
     };
 
     const concurrency = Math.max(1, Math.min(4, this.getSettings().apiConcurrency || 3));
-    while (!manifest.jobs.every(j => j.status === 'complete')) {
+    while (!jobs.every(j => j.status === 'complete')) {
       if (this.cancelled) throw new Error('Cancelled.');
-      const ready = manifest.jobs.filter(j => j.status !== 'complete' && (j.depends_on || []).every(done));
+      const ready = jobs.filter(j => j.status !== 'complete' && (j.depends_on || []).every(done));
       if (!ready.length) throw new Error('No image job is ready; the manifest has an unmet dependency.');
-      this.set({ step: `Generating images (${manifest.jobs.filter(j => j.status === 'complete').length}/${manifest.jobs.length})` });
+      this.set({ step: `Generating images (${completed()}/${jobs.length})` });
       for (let i = 0; i < ready.length; i += concurrency) {
         await Promise.all(ready.slice(i, i + concurrency).map(runJob));
       }

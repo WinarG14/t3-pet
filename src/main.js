@@ -9,7 +9,7 @@ const { listPets, ATLAS, CODEX_PETS } = require('./pets');
 const { PetBuilder } = require('./builder');
 const { T3Client } = require('./t3client');
 const { TaskSource } = require('./tasks');
-const { IS_WIN, IS_MAC, defaultPython, defaultT3App, openT3App } = require('./platform');
+const { IS_WIN, IS_MAC, defaultPython, defaultT3App, openT3App, setMacDevLoginItem } = require('./platform');
 
 const APP_ID = 'dev.t3pet.desktop';
 app.setName('T3 Pet');
@@ -443,6 +443,10 @@ ipcMain.handle('file:open', (_e, p) => (typeof p === 'string' && fs.existsSync(p
 ipcMain.handle('file:url', (_e, p) => (typeof p === 'string' && fs.existsSync(p) ? pathToFileURL(p).href + '?v=' + Date.now() : null));
 
 function setLoginItem(on) {
+  if (IS_MAC && !app.isPackaged) {
+    setMacDevLoginItem(on, { label: APP_ID, execPath: process.execPath, appPath: app.getAppPath(), envPath: process.env.PATH });
+    return;
+  }
   app.setLoginItemSettings({ openAtLogin: on, path: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] });
 }
 

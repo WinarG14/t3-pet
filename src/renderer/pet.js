@@ -89,7 +89,7 @@ async function applyConfig(c) {
   sprite.style.width = Math.round(a.cellWidth * s) + 'px';
   sprite.style.height = Math.round(a.cellHeight * s) + 'px';
   sprite.style.backgroundImage = `url("${cfg.pet.dataUrl || cfg.pet.url}")`;
-  sprite.style.backgroundSize = `${a.width * s}px ${a.height * s}px`;
+  sprite.style.backgroundSize = `${a.width * s}px auto`; // auto height: 8x9 and 8x11 (v2) sheets both keep their aspect
   rowScale = cfg.normalizeSize === false ? {} : await measureRows(cfg.pet.dataUrl || cfg.pet.url, a);
   restart();
 }

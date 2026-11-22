@@ -1,4 +1,4 @@
-// Finds Codex-compatible pets (pet.json + 8x9 spritesheet) in ~/.codex/pets and the app's own pets folder.
+// Finds Codex-compatible pets (pet.json + 8x9 spritesheet, or 8x11 v2 with look rows; rows 0-8 are used) in ~/.codex/pets and the app's own pets folder.
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
