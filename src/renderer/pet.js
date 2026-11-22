@@ -171,11 +171,17 @@ function esc(s) {
   return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// Quick actions on finished rows: settle (needs thread actions on) and hide from the pet.
+const QUICK = ['done', 'stopped', 'failed', 'needs-reply'];
 function rowHtml(key, state, title, detail, label, machine) {
-  return `<div class="row ${state}" data-thread="${esc(key)}" title="Open in T3"><span class="dot"></span><div class="txt">
+  const icons = window.ICONS || {};
+  const quick = QUICK.includes(state)
+    ? `<div class="qa"><button data-act="settle" title="Settle">${icons.check || '✓'}</button><button data-act="dismiss" title="Hide until it changes">${icons.eyeOff || '×'}</button></div>`
+    : '';
+  return `<div class="row ${state}" data-thread="${esc(key)}"><span class="dot"></span><div class="txt">
       <span class="t">${esc(title)}</span>
       <span class="d">${esc(label)}${machine ? ' · ' + esc(machine) : ''}${detail ? ': ' + esc(detail) : ''}</span>
-    </div></div>`;
+    </div>${quick}</div>`;
 }
 
 function renderSummary() {
@@ -189,8 +195,40 @@ function renderSummary() {
   return `<div class="head"><span class="mood ${esc(mood.anim)}"></span>${esc(mood.label)}</div>${rows}${more}`;
 }
 
+/** Make `cur`'s children match `next`'s, reusing elements so hover state survives (no flicker). */
+function morph(cur, next) {
+  const a = [...cur.childNodes];
+  const b = [...next.childNodes];
+  for (let i = 0; i < b.length; i++) {
+    const n = b[i];
+    const c = a[i];
+    if (!c) { cur.appendChild(n.cloneNode(true)); continue; }
+    if (c.nodeType !== n.nodeType || c.nodeName !== n.nodeName || (c.dataset && n.dataset && c.dataset.thread !== n.dataset.thread)) {
+      cur.replaceChild(n.cloneNode(true), c);
+      continue;
+    }
+    if (n.nodeType === Node.TEXT_NODE) {
+      if (c.nodeValue !== n.nodeValue) c.nodeValue = n.nodeValue;
+      continue;
+    }
+    if (c.isEqualNode(n)) continue;
+    for (const { name, value } of [...n.attributes]) if (c.getAttribute(name) !== value) c.setAttribute(name, value);
+    for (const { name } of [...c.attributes]) if (!n.hasAttribute(name)) c.removeAttribute(name);
+    morph(c, n);
+  }
+  for (let i = a.length - 1; i >= b.length; i--) a[i].remove();
+}
+
+let bubbleHtml = '';
+let noteTimer = null;
 function showBubble(html, ms) {
-  bubble.innerHTML = html;
+  // Update in place only when the content changed: replacing it every refresh made the row under the mouse flicker.
+  if (html !== bubbleHtml) {
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    morph(bubble, t.content);
+    bubbleHtml = html;
+  }
   bubble.classList.remove('hidden');
   clearTimeout(bubbleTimer);
   if (ms) bubbleTimer = setTimeout(() => { if (!hovering) bubble.classList.add('hidden'); }, ms);
@@ -287,8 +325,38 @@ sprite.addEventListener('pointerup', e => {
   }
 });
 sprite.addEventListener('contextmenu', e => { e.preventDefault(); window.pet.menu(); });
-bubble.addEventListener('click', e => {
+/** A short line at the bottom of the bubble (no native dialogs). */
+function note(text, kind) {
+  let el = bubble.querySelector('.note');
+  if (!el) {
+    el = document.createElement('div');
+    bubble.appendChild(el);
+  }
+  el.className = `note ${kind || ''}`;
+  el.textContent = text;
+  bubbleHtml = ''; // the bubble now differs from the rendered summary: allow the next refresh to redraw it
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { if (el.isConnected) el.remove(); }, 5000);
+}
+
+bubble.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-act]');
   const row = e.target.closest('[data-thread]');
+  if (btn && row) {
+    e.stopPropagation();
+    btn.disabled = true;
+    const r = await window.pet.threadAction(row.dataset.thread, btn.dataset.act);
+    btn.disabled = false;
+    if (r.ok) {
+      row.classList.add('gone');
+      note(btn.dataset.act === 'settle' ? 'Settled' : 'Hidden until it changes', 'ok');
+    } else if (r.needsActions) {
+      note('Turn on thread actions in the panel’s Settings to settle from here.', 'error');
+    } else {
+      note(r.error || 'That did not work.', 'error');
+    }
+    return;
+  }
   if (row) window.pet.openThread(row.dataset.thread);
   else window.pet.click();
 });

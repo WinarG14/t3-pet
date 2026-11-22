@@ -88,10 +88,9 @@ function stepsHtml(steps) {
     <div class="cur">${done}/${steps.length}${cur ? ' · ' + esc(cur.text) : ' · all steps done'}</div></div>`;
 }
 
-function taskHtml(t, multiEnv) {
-  const icon = ico(STATE_ICON[t.state] || 'dot');
-  const iconCls = t.state === 'running' ? 'pulse' : (t.state === 'waiting' || t.state === 'needs-reply') ? 'pulse' : '';
-  const machine = multiEnv ? `<span class="machine" title="${esc(t.isLocal ? 'This computer' : 'Linked: ' + t.envLabel)}">${ico('monitor')}${esc(t.isLocal ? THIS_MACHINE : t.envLabel)}</span>` : '';
+/** The parts of a task card. Kept separate so a refresh can update a card in place (see patchList). */
+function taskParts(t, multiEnv) {
+  const machine = multiEnv ? `<span class="machine">${ico('monitor')}${esc(t.isLocal ? THIS_MACHINE : t.envLabel)}</span>` : '';
   // Only offer what T3 accepts for this state: a running thread has no finished run to settle or mark unread.
   const finished = ['done', 'stopped', 'failed', 'needs-reply', 'idle'].includes(t.state);
   const acts = [
@@ -100,16 +99,59 @@ function taskHtml(t, multiEnv) {
     ['snooze', 'snooze', 'Snooze for 1 hour'],
     ...(['done', 'stopped', 'failed', 'needs-reply'].includes(t.state) ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
   ];
-  return `<div class="task ${t.state}" data-key="${esc(t.key)}" tabindex="0" title="Open in T3">
-    <div class="ic ${iconCls}">${icon}</div>
-    <div class="body">
-      <div class="t">${esc(t.title)}</div>
+  return {
+    cls: `task ${t.state}`,
+    ic: `<div class="ic ${['running', 'waiting', 'needs-reply'].includes(t.state) ? 'pulse' : ''}">${ico(STATE_ICON[t.state] || 'dot')}</div>`,
+    body: `<div class="t">${esc(t.title)}</div>
       <div class="meta"><span>${LABEL[t.state]}</span>${t.project ? `<span>· ${esc(t.project)}</span>` : ''}<span>· ${ago(t.completedAt || t.updatedAt)}</span>${machine}</div>
       ${t.detail ? `<div class="detail">${esc(t.detail)}</div>` : ''}
-      ${stepsHtml(t.steps)}
-    </div>
-    <div class="hover-actions">${acts.map(([a, i, title]) => `<button data-act="${a}" title="${title}">${ico(i)}</button>`).join('')}</div>
-  </div>`;
+      ${stepsHtml(t.steps)}`,
+    acts: acts.map(([a, i, title]) => `<button data-act="${a}" title="${title}">${ico(i)}</button>`).join(''),
+  };
+}
+
+function makeTaskNode(key, parts) {
+  const n = document.createElement('div');
+  n.dataset.key = key;
+  n.tabIndex = 0;
+  n.innerHTML = `<div class="ic-slot"></div><div class="body"></div><div class="hover-actions"></div>`;
+  return n;
+}
+
+/** Set only the parts that changed, so the node under the mouse keeps its hover state (no flicker). */
+function updateTaskNode(n, parts) {
+  if (n.className !== parts.cls) n.className = parts.cls;
+  const slot = n.querySelector('.ic-slot');
+  if (slot._h !== parts.ic) { slot.innerHTML = parts.ic; slot._h = parts.ic; }
+  const body = n.querySelector('.body');
+  if (body._h !== parts.body) { body.innerHTML = parts.body; body._h = parts.body; }
+  const acts = n.querySelector('.hover-actions');
+  if (acts._h !== parts.acts) { acts.innerHTML = parts.acts; acts._h = parts.acts; }
+}
+
+/**
+ * Keyed list update. items: [{ id, kind: 'head'|'task', html?, parts?, key? }]. Existing nodes are reused
+ * and only changed parts are touched; nodes are moved, not recreated, when the order changes.
+ */
+function patchList(container, items) {
+  const existing = new Map();
+  for (const n of [...container.children]) if (n._rid) existing.set(n._rid, n);
+  let prev = null;
+  for (const it of items) {
+    let n = existing.get(it.id);
+    existing.delete(it.id);
+    if (it.kind === 'head') {
+      if (!n) { n = document.createElement('div'); n.className = 'group-head'; n._rid = it.id; }
+      if (n._h !== it.html) { n.innerHTML = it.html; n._h = it.html; }
+    } else {
+      if (!n) { n = makeTaskNode(it.key); n._rid = it.id; }
+      updateTaskNode(n, it.parts);
+    }
+    const want = prev ? prev.nextSibling : container.firstChild;
+    if (n !== want) container.insertBefore(n, want);
+    prev = n;
+  }
+  for (const n of existing.values()) n.remove();
 }
 
 function render() {
@@ -135,24 +177,25 @@ function render() {
     const n = g.states.reduce((s, st) => s + (c[st] || 0), 0);
     return n ? `<span class="chip ${g.chip} ${filter === g.name ? 'active' : ''}" data-filter="${g.name}"><span class="d"></span>${g.name}<b>${n}</b></span>` : '';
   }).join('');
-  $('#chips').innerHTML = chips;
+  if ($('#chips')._h !== chips) { $('#chips').innerHTML = chips; $('#chips')._h = chips; }
   $('#chips').hidden = !chips;
 
   const threads = snap.threads || [];
   const active = threads.filter(t => t.state !== 'idle');
   const quiet = threads.filter(t => t.state === 'idle');
-  let html = '';
+  const items = [];
   for (const g of GROUPS) {
     if (filter && filter !== g.name) continue;
     const list = active.filter(t => g.states.includes(t.state));
     if (!list.length) continue;
-    html += `<div class="group-head">${g.name}<span class="n">${list.length}</span></div>` + list.map(t => taskHtml(t, multiEnv)).join('');
+    items.push({ id: 'g:' + g.name, kind: 'head', html: `${g.name}<span class="n">${list.length}</span>` });
+    for (const t of list) items.push({ id: 't:' + t.key, kind: 'task', key: t.key, parts: taskParts(t, multiEnv) });
   }
-  $('#taskList').innerHTML = html;
+  patchList($('#taskList'), items);
   $('#empty').hidden = !!active.length || !snap.ok;
   $('#quiet').hidden = !quiet.length;
   $('#quietCount').textContent = quiet.length;
-  $('#quietList').innerHTML = quiet.slice(0, 30).map(t => taskHtml(t, multiEnv)).join('');
+  patchList($('#quietList'), quiet.slice(0, 30).map(t => ({ id: 't:' + t.key, kind: 'task', key: t.key, parts: taskParts(t, multiEnv) })));
   const src = snap.source === 'database' ? "this computer's T3 database" : 'T3';
   $('#foot').textContent = snap.ok ? `Updated ${new Date(snap.at).toLocaleTimeString()} from ${src}.` : '';
   $('#actionsBanner').hidden = !actionsHint;
