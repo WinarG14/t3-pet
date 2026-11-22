@@ -230,10 +230,44 @@ function showBubble(html, ms) {
     morph(bubble, t.content);
     bubbleHtml = html;
   }
+  positionBubble();
   bubble.classList.remove('hidden');
   clearTimeout(bubbleTimer);
   if (ms) bubbleTimer = setTimeout(() => { if (!hovering) bubble.classList.add('hidden'); }, ms);
 }
+
+// ---------- placement: where the pet sits in its window, and where the bubble fits ----------
+let layout = null; // { x, y, w, h } of the pet inside this window, from the main process
+const petwrapEl = document.getElementById('petwrap');
+function applyLayout(l) {
+  if (!l) return;
+  layout = l;
+  petwrapEl.style.left = `${l.x}px`;
+  petwrapEl.style.top = `${l.y}px`;
+  positionBubble();
+}
+/** Above the pet if it fits, else below; shifted sideways to stay inside the window; tail points at the pet. */
+function positionBubble() {
+  if (!layout) return;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const bw = bubble.offsetWidth || 272;
+  const bh = bubble.offsetHeight || 120;
+  const gap = 10;
+  const cx = layout.x + layout.w / 2;
+  const spaceAbove = layout.y - gap;
+  const spaceBelow = H - (layout.y + layout.h) - gap;
+  const below = spaceAbove < bh + 4 && spaceBelow > spaceAbove;
+  const top = below ? layout.y + layout.h + gap : Math.max(4, layout.y - gap - bh);
+  const left = Math.min(Math.max(cx - bw * 0.78, 4), W - bw - 4);
+  const tail = Math.min(Math.max(cx - left, 22), bw - 22);
+  bubble.style.left = `${Math.round(left)}px`;
+  bubble.style.top = `${Math.round(top)}px`;
+  bubble.style.setProperty('--tail-x', `${Math.round(tail)}px`);
+  bubble.classList.toggle('below', below);
+}
+window.pet.onLayout(applyLayout);
+window.pet.layout().then(applyLayout);
 
 function hideBubbleSoon() {
   clearTimeout(bubbleTimer);
@@ -336,6 +370,7 @@ function note(text, kind) {
   el.className = `note ${kind || ''}`;
   el.textContent = text;
   bubbleHtml = ''; // the bubble now differs from the rendered summary: allow the next refresh to redraw it
+  positionBubble();
   clearTimeout(noteTimer);
   noteTimer = setTimeout(() => { if (el.isConnected) el.remove(); }, 5000);
 }

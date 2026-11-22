@@ -67,10 +67,15 @@ let polling = false;
 let mutedUntil = 0;
 
 function loadSettings() {
+  let text;
+  try { text = fs.readFileSync(SETTINGS_FILE, 'utf8'); } catch { return { ...DEFAULTS }; } // first run
   try {
-    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    const s = JSON.parse(text.replace(/^﻿/, '')); // tolerate a byte-order mark from Windows editors
     return { ...DEFAULTS, ...s, notify: { ...DEFAULTS.notify, ...(s.notify || {}) } };
-  } catch {
+  } catch (e) {
+    // Never silently replace an unreadable file (it holds sign-ins and keys): keep a copy first.
+    try { fs.copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.unreadable-${Date.now()}`); } catch {}
+    console.error('settings.json could not be read; a copy was kept and defaults are used:', e.message);
     return { ...DEFAULTS };
   }
 }
@@ -187,19 +192,52 @@ function openThread(key) {
 const PET_W = 300;
 const PET_H = 420; // tall enough for the bubble; empty space is click-through
 
-function clampToDisplay(pos, w, h, minVisibleH = 140) {
-  const d = screen.getDisplayNearestPoint({ x: Math.round(pos.x + w / 2), y: Math.round(pos.y + h / 2) }).workArea;
+// The pet's own position (settings.petPos, the sprite's top-left on screen) is kept separate from its
+// window. The window always stays fully on screen; near an edge the pet moves inside the window instead,
+// so the bubble can open wherever there is room (above or below, shifted left or right).
+function spriteSize() {
+  const s = settings.scale || 0.6;
+  return { w: Math.round(192 * s), h: Math.round(208 * s) };
+}
+function displayFor(p, w, h) {
+  return screen.getDisplayNearestPoint({ x: Math.round(p.x + w / 2), y: Math.round(p.y + h / 2) }).workArea;
+}
+function currentPetPos() {
+  const { w, h } = spriteSize();
+  let p = settings.petPos;
+  if (!p && settings.position) p = { x: settings.position.x + PET_W - 8 - w, y: settings.position.y + PET_H - 4 - h }; // older setting
+  if (!p) {
+    const wa = screen.getPrimaryDisplay().workArea;
+    p = { x: wa.x + wa.width - w - 32, y: wa.y + wa.height - h - 12 };
+  }
+  const d = displayFor(p, w, h);
+  return { x: Math.min(Math.max(p.x, d.x), d.x + d.width - w), y: Math.min(Math.max(p.y, d.y), d.y + d.height - h) };
+}
+function petLayout() {
+  const { w, h } = spriteSize();
+  const p = currentPetPos();
+  const d = displayFor(p, w, h);
+  let wx = p.x - (PET_W - 8 - w); // preferred: pet near the window's bottom-right corner
+  let wy = p.y - (PET_H - 4 - h);
+  wx = Math.min(Math.max(wx, d.x), d.x + d.width - PET_W);
+  wy = Math.min(Math.max(wy, d.y), d.y + d.height - PET_H);
   return {
-    x: Math.min(Math.max(pos.x, d.x - w / 2), d.x + d.width - w / 2),
-    y: Math.min(Math.max(pos.y, d.y - h + minVisibleH), d.y + d.height - h),
+    pet: p,
+    win: { x: Math.round(wx), y: Math.round(wy), width: PET_W, height: PET_H },
+    sprite: { x: Math.round(p.x - wx), y: Math.round(p.y - wy), w, h },
   };
+}
+function applyPetLayout() {
+  if (!petWin || petWin.isDestroyed()) return;
+  const L = petLayout();
+  petWin.setBounds(L.win);
+  send(petWin, 'pet:layout', L.sprite);
 }
 
 function createPetWindow() {
-  const wa = screen.getPrimaryDisplay().workArea;
-  const pos = clampToDisplay(settings.position || { x: wa.x + wa.width - PET_W - 24, y: wa.y + wa.height - PET_H - 8 }, PET_W, PET_H);
+  const L = petLayout();
   petWin = new BrowserWindow({
-    width: PET_W, height: PET_H, x: Math.round(pos.x), y: Math.round(pos.y),
+    ...L.win,
     transparent: true, frame: false, resizable: false, movable: true, skipTaskbar: true,
     alwaysOnTop: true, hasShadow: false, focusable: true, show: false, backgroundColor: '#00000000',
     title: 'T3 Pet', fullscreenable: false,
@@ -215,6 +253,7 @@ function createPetWindow() {
   petWin.webContents.on('render-process-gone', () => setTimeout(recreatePetWindow, 500));
   petWin.on('unresponsive', () => setTimeout(recreatePetWindow, 500));
   petWin.loadFile(path.join(__dirname, 'renderer', 'pet.html'));
+  petWin.webContents.on('did-finish-load', () => send(petWin, 'pet:layout', petLayout().sprite));
   petWin.once('ready-to-show', () => {
     petWin.showInactive();
     if (tray) tray.setContextMenu(trayMenu()); // the menu was built while the pet was still hidden
@@ -227,14 +266,14 @@ const PANEL_H = 640;
 
 /** Place the panel beside the pet (left of it if there is room, else right), inside the screen. */
 function panelBounds() {
-  const d = petWin ? screen.getDisplayMatching(petWin.getBounds()).workArea : screen.getPrimaryDisplay().workArea;
-  if (!petWin) return { x: d.x + d.width - PANEL_W - 16, y: d.y + d.height - PANEL_H - 16 };
-  const b = petWin.getBounds();
-  const petRight = b.x + b.width - 8;
-  const petLeft = b.x + b.width - 140;
-  let x = petLeft - PANEL_W - 4;
-  if (x < d.x + 8) x = Math.min(petRight + 4, d.x + d.width - PANEL_W - 8);
-  let y = b.y + b.height - PANEL_H;
+  const { w, h } = spriteSize();
+  const p = currentPetPos();
+  const d = displayFor(p, w, h);
+  if (!petVisible()) return { x: d.x + d.width - PANEL_W - 16, y: d.y + d.height - PANEL_H - 16 };
+  let x = p.x - PANEL_W - 6;                                   // left of the pet if there is room,
+  if (x < d.x + 8) x = p.x + w + 6;                            // else right of it,
+  x = Math.min(Math.max(x, d.x + 8), d.x + d.width - PANEL_W - 8); // and always on screen
+  let y = p.y + h - PANEL_H + 20;
   y = Math.min(Math.max(y, d.y + 8), d.y + d.height - PANEL_H - 8);
   return { x: Math.round(x), y: Math.round(y) };
 }
@@ -377,6 +416,7 @@ function togglePet() {
 /** Move the pet back to the bottom-right corner of the primary screen, rebuild its window, and show it. */
 function resetPet() {
   settings.position = null;
+  settings.petPos = null;
   saveSettings();
   recreatePetWindow();
   setPetVisible(true);
@@ -405,15 +445,16 @@ ipcMain.handle('tasks:get', () => ({ snapshot, mood: watcher.petMood(snapshot) }
 ipcMain.on('pet:mouse', (_e, capture) => { if (petWin) petWin.setIgnoreMouseEvents(!capture, { forward: true }); });
 ipcMain.on('pet:drag', (_e, d) => {
   if (!petWin || !d || !Number.isFinite(d.dx) || !Number.isFinite(d.dy)) return;
-  const [x, y] = petWin.getPosition();
-  petWin.setPosition(Math.round(x + d.dx), Math.round(y + d.dy));
+  const p = currentPetPos();
+  settings.petPos = { x: Math.round(p.x + d.dx), y: Math.round(p.y + d.dy) };
+  applyPetLayout();
 });
 ipcMain.on('pet:dragEnd', () => {
-  if (!petWin) return;
-  const [x, y] = petWin.getPosition();
-  settings.position = { x, y };
+  settings.petPos = currentPetPos();
+  settings.position = null;
   saveSettings();
 });
+ipcMain.handle('pet:layout', () => petLayout().sprite);
 ipcMain.on('pet:click', () => togglePanel('tasks'));
 ipcMain.on('pet:menu', () => trayMenu().popup({ window: petWin }));
 ipcMain.on('t3:focus', () => focusT3());
@@ -448,6 +489,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
   if ('openAtLogin' in patch) setLoginItem(!!patch.openAtLogin);
   if (['pollMs', 't3DbPath', 'lookbackHours', 'dataSource'].some(k => k in patch)) startPolling();
   if (['scale', 'motion', 'normalizeSize'].some(k => k in patch)) send(petWin, 'pet:config', petConfig());
+  if ('scale' in patch) applyPetLayout();
   return publicSettings();
 });
 ipcMain.handle('keys:set', (_e, { name, value }) => {
@@ -521,6 +563,8 @@ app.whenReady().then(() => {
   tray.setContextMenu(trayMenu());
   if (!IS_MAC) tray.on('click', () => togglePanel('tasks'));
   if (!settings.petHidden) createPetWindow();
+  // Screens added, removed or resized: keep the pet (and its bubble) on a visible screen.
+  for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, () => applyPetLayout());
   startPolling();
   // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
   // `--test-notification` shows one sample notification (to check OS notification permissions).

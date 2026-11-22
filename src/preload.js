@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('pet', {
   // pet window
   config: () => ipcRenderer.invoke('pet:config'),
   onConfig: fn => on('pet:config', fn),
+  layout: () => ipcRenderer.invoke('pet:layout'),
+  onLayout: fn => on('pet:layout', fn),
   mouse: capture => ipcRenderer.send('pet:mouse', !!capture),
   drag: (dx, dy) => ipcRenderer.send('pet:drag', { dx, dy }),
   dragEnd: () => ipcRenderer.send('pet:dragEnd'),
