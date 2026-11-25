@@ -103,6 +103,10 @@ assert.deepStrictEqual(w.diffSnapshots(pcDown, both), [], 'a link came back: no 
 const later = { ...both, threads: [th('mac', 'a', 'done'), th('pc', 'b', 'needs-reply'), th('pc', 'c', 'failed'), th('pc', 'd', 'waiting')] };
 assert.deepStrictEqual(w.diffSnapshots(both, later).map(e => e.kind + ':' + e.thread.key), ['waiting:pc/d'], 'a real change on a seen machine still notifies');
 assert.strictEqual(w.petMood({ ok: false, problem: { code: 'not-installed' } }).anim, 'idle', 'no T3 yet: a calm pet, not a sad one');
+const expired = { ...both, environments: [local, { id: 'pc', status: 'expired' }], threads: [th('mac', 'a', 'done')] };
+assert.deepStrictEqual(w.diffSnapshots(expired, both), [], 'an expired link that comes back: no burst');
+const downCached = { ...both, environments: [local, { id: 'pc', status: 'error' }], threads: [th('mac', 'a', 'done'), th('pc', 'b', 'running')] };
+assert.deepStrictEqual(w.diffSnapshots(downCached, later), [], 'cached threads of a machine that was down do not count as seen');
 // The first detail read of a thread (pending approvals, a question at the end) is its starting state.
 const pv = (k, state, provisional) => ({ ...th('pc', k, state), provisional });
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [pv('e', 'running', true)] }, { ...both, threads: [pv('e', 'waiting', false)] }), [], 'first read: no alert');

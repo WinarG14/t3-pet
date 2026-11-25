@@ -185,7 +185,7 @@ class T3Client {
     this.lastIssueAttempt = Date.now();
     this.lastIssueError = null;
     try {
-      if (!this.cliAvailable()) throw new McpError(`T3's command-line tool was not found at ${this.cliPath}. Open T3 Code once so it installs it.`, { code: 'no_cli' });
+      if (!this.cliAvailable()) throw new McpError(`T3's command-line tool was not found at ${this.cliPath}. Restart or update T3 Code so it installs it, then click Check again.`, { code: 'no_cli' });
       cred = await this.issueSession(['--subject', 'mcp-client', '--scope', 'orchestration:read', '--ttl', '30d', '--label', READ_LABEL]);
     } catch (e) {
       this.lastIssueError = e;

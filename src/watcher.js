@@ -241,9 +241,12 @@ function diffSnapshots(prev, next) {
   const before = new Map(prev.threads.map(t => [keyOf(t), t]));
   // A machine the previous snapshot could not see (T3 started after the pet, a link came back) is new
   // to the pet, not new to the user: take its threads as they are, without a notification burst.
+  // Only a machine that was reachable counts; cached threads of a machine that was down do not.
+  const prevEnvs = prev.environments || [];
+  const downEnvs = new Set(prevEnvs.filter(e => e.status && e.status !== 'reachable').map(e => e.id));
   const seenEnvs = new Set([
-    ...(prev.environments || []).filter(e => e.status !== 'error').map(e => e.id),
-    ...prev.threads.map(t => t.envId),
+    ...prevEnvs.filter(e => !e.status || e.status === 'reachable').map(e => e.id),
+    ...prev.threads.map(t => t.envId).filter(id => id && !downEnvs.has(id)),
   ]);
   const events = [];
   for (const t of next.threads) {

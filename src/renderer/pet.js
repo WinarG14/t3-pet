@@ -288,8 +288,14 @@ function updateBadge() {
 
 const EVENT_HEAD = { waiting: 'I need your decision', 'needs-reply': 'A task is asking you', failed: 'Something failed', done: 'A task finished' };
 
+let lastProblem = null;
 function onTasks(p) {
   const prevAnim = mood.anim;
+  // A set-up step that needs the user (not just "T3 is closed"): say so once, without waiting for a hover.
+  const pr = p.snapshot && p.snapshot.problem;
+  const code = pr && pr.code !== 'not-running' ? pr.code : null;
+  const newProblem = code && code !== lastProblem;
+  lastProblem = code;
   snapshot = p.snapshot;
   mood = p.mood;
   updateBadge();
@@ -301,6 +307,9 @@ function onTasks(p) {
     if (e.kind === 'done') react('jumping', 1);
     else if (e.kind === 'waiting' || e.kind === 'needs-reply') react('waving', 1);
     else if (e.kind === 'failed') react('failed', 1);
+  } else if (newProblem) {
+    showBubble(renderSummary(), 12000);
+    react('waving', 1);
   } else if (hovering) {
     showBubble(renderSummary());
   }
@@ -355,6 +364,7 @@ sprite.addEventListener('pointercancel', () => {
   drag = null;
   sprite.classList.remove('dragging');
   if (moved) { override = null; restart(); window.pet.dragEnd(); }
+  if (!sprite.matches(':hover') && !bubble.matches(':hover')) { hovering = false; window.pet.mouse(false); hideBubbleSoon(); }
 });
 sprite.addEventListener('pointerup', e => {
   if (!drag) return;

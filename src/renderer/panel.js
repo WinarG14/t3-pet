@@ -444,7 +444,7 @@ function renderConnection() {
       return `<div class="connrow"><span class="d ${off ? 'off' : ''}"></span><span>${esc(e.isLocal ? `${e.label} (this computer)` : `${e.label} (linked)`)}${why}</span></div>`;
     }).join('');
   const how = !snap ? '' : snap.source === 'database'
-    ? (snap.problem ? esc(snap.problem.text) : "Reading this computer's T3 database (linked machines are not visible in this mode).")
+    ? (snap.problem ? esc(snap.problem.text) : !snap.ok ? esc(snap.error || "T3 Pet can't read T3.") : "Reading this computer's T3 database (linked machines are not visible in this mode).")
     : 'Reading T3 through its tools with a read-only sign-in named “T3 Pet (read-only)”.';
   const getOrOpen = snap && snap.problem && snap.problem.code === 'not-installed'
     ? '<button class="btn primary small" data-setup="getT3">Get T3 Code</button>'
