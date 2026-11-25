@@ -187,7 +187,10 @@ function rowHtml(key, state, title, detail, label, machine) {
 
 function renderSummary() {
   if (!snapshot) return '<div class="head">Looking for T3…</div>';
-  if (!snapshot.ok) return `<div class="head">I can't read T3</div><div class="d">${esc(snapshot.error)}</div>`;
+  if (!snapshot.ok) {
+    const pr = snapshot.problem;
+    return `<div class="head">${pr ? esc(mood.label) : "I can't read T3"}</div><div class="d">${esc(pr ? pr.text : snapshot.error)}</div><div class="more">Click me to fix it</div>`;
+  }
   const active = snapshot.threads.filter(t => t.state !== 'idle');
   if (!active.length) return `<div class="head"><span class="mood idle"></span>All caught up</div><div class="d solo">Nothing is running or waiting for you. Click me for the task list.</div>`;
   const multi = (snapshot.environments || []).length > 1;
@@ -344,6 +347,14 @@ sprite.addEventListener('pointermove', e => {
       restart();
     }
   }
+});
+// Pointer capture lost (window hidden mid-drag, touch cancelled): end the drag so hover never moves the pet.
+sprite.addEventListener('pointercancel', () => {
+  if (!drag) return;
+  const moved = drag.moved;
+  drag = null;
+  sprite.classList.remove('dragging');
+  if (moved) { override = null; restart(); window.pet.dragEnd(); }
 });
 sprite.addEventListener('pointerup', e => {
   if (!drag) return;

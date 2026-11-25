@@ -91,4 +91,16 @@ const keyed = (k, state, runId) => ({ key: k, id: k.split('/')[1], state, runId,
 assert.deepStrictEqual(
   w.diffSnapshots({ ok: true, threads: [keyed('pc/a', 'running', 'r1'), keyed('mac/a', 'running', 'r1')] }, { ok: true, threads: [keyed('pc/a', 'running', 'r1'), keyed('mac/a', 'done', 'r1')] }).map(e => e.kind + ':' + e.thread.key),
   ['done:mac/a'], 'same thread id on two machines stays separate');
+// A machine that was not visible before (T3 started after the pet, or a link came back) must not
+// fire a notification for every thread it already had.
+const th = (env, id, state) => ({ key: `${env}/${id}`, id, envId: env, state, runId: 'r1', title: id });
+const local = { id: 'mac', isLocal: true, status: 'reachable' };
+const dbOnly = { ok: true, source: 'database', environments: [local], threads: [th('mac', 'a', 'done')] };
+const both = { ok: true, source: 'mcp', environments: [local, { id: 'pc', status: 'reachable' }], threads: [th('mac', 'a', 'done'), th('pc', 'b', 'needs-reply'), th('pc', 'c', 'failed')] };
+assert.deepStrictEqual(w.diffSnapshots(dbOnly, both), [], 'T3 started after the pet: no burst');
+const pcDown = { ...both, environments: [local, { id: 'pc', status: 'error' }], threads: [th('mac', 'a', 'done')] };
+assert.deepStrictEqual(w.diffSnapshots(pcDown, both), [], 'a link came back: no burst');
+const later = { ...both, threads: [th('mac', 'a', 'done'), th('pc', 'b', 'needs-reply'), th('pc', 'c', 'failed'), th('pc', 'd', 'waiting')] };
+assert.deepStrictEqual(w.diffSnapshots(both, later).map(e => e.kind + ':' + e.thread.key), ['waiting:pc/d'], 'a real change on a seen machine still notifies');
+assert.strictEqual(w.petMood({ ok: false, problem: { code: 'not-installed' } }).anim, 'idle', 'no T3 yet: a calm pet, not a sad one');
 console.log('state rule checks passed');

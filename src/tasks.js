@@ -41,6 +41,14 @@ function deriveState(t, x = {}) {
   return { state: 'done', detail };
 }
 
+/** Turn a T3 client error into a setup problem the panel can explain and offer a fix for. */
+function problemFrom(e) {
+  if (e && e.code === 'no_cli') return { code: 'no-cli', text: e.message };
+  if (e && e.code === 'unreachable') return { code: 'unreachable', text: 'T3 Code does not answer right now.' };
+  if (e && e.code === 'unauthorized') return { code: 'signin', text: 'T3 refused the pet\u2019s read-only sign-in.' };
+  return { code: 'error', text: `T3 Pet can't read T3 (${(e && e.message) || 'unknown error'}).` };
+}
+
 class TaskSource {
   /**
    * @param {object} o
@@ -143,12 +151,17 @@ class TaskSource {
 
   async snapshot() {
     const s = this.getSettings();
-    if (s.dataSource === 'database' || !this.client.serverRunning()) return this.fallback(this.client.serverRunning() ? null : 'T3 is not running.');
+    if (s.dataSource === 'database') return this.fallback(null);
+    if (!this.client.serverRunning()) {
+      return require('fs').existsSync(this.client.userdata)
+        ? this.fallback({ code: 'not-running', text: 'T3 Code is not running, so linked machines are hidden.' })
+        : this.fallback({ code: 'not-installed', text: 'T3 Code is not set up on this computer yet. Install it and open it once; T3 Pet then connects by itself.' });
+    }
     let envs;
     try {
       envs = await this.environments();
     } catch (e) {
-      return this.fallback(e.message);
+      return this.fallback(problemFrom(e));
     }
     const local = { id: envs.localId, label: os.hostname(), isLocal: true, status: 'reachable' };
     const environments = [local, ...envs.links.map(l => ({ ...l, isLocal: false }))];
@@ -157,7 +170,7 @@ class TaskSource {
     try {
       lists.push({ env: local, threads: await this.listThreads(local.id, true) });
     } catch (e) {
-      return this.fallback(e.message);
+      return this.fallback(problemFrom(e));
     }
     const remoteEvery = Math.max(5e3, s.remotePollMs || 10e3);
     await Promise.all(envs.links.map(async link => {
@@ -237,12 +250,19 @@ class TaskSource {
     return this.last;
   }
 
-  fallback(reason) {
+  /** "Check again": ask every linked machine on the next poll instead of waiting for its interval. */
+  refreshRemotes() {
+    for (const c of this.remote.values()) c.at = 0;
+  }
+
+  /** This computer's T3 database only. `problem` ({ code, text }) says why, or null when the user chose it. */
+  fallback(problem) {
     const snap = watcher.readSnapshot({ dbPath: this.getSettings().t3DbPath, lookbackHours: this.getSettings().lookbackHours });
     const envId = (() => { try { return require('fs').readFileSync(require('path').join(watcher.T3_DIR, 'environment-id'), 'utf8').trim(); } catch { return 'local'; } })();
     for (const t of snap.threads || []) Object.assign(t, { key: `${envId}/${t.id}`, envId, envLabel: os.hostname(), isLocal: true });
     snap.source = 'database';
-    snap.notice = reason ? `Showing this computer only (${reason})` : 'Showing this computer only';
+    snap.notice = problem ? `${problem.text} Showing this computer's threads only.` : 'Showing this computer only';
+    snap.problem = problem || null;
     snap.environments = [{ id: envId, label: os.hostname(), isLocal: true, status: 'reachable' }];
     this.last = snap;
     return snap;

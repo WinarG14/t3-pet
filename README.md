@@ -78,6 +78,21 @@ this adds `~/Library/LaunchAgents/dev.t3pet.desktop.plist`, and macOS shows a on
 Lost the pet? Click the paw in the panel's header, or Settings → *Bring pet back* (also in the tray /
 menu bar menu).
 
+## Connect to T3 and your other machines
+
+There is nothing to set up in T3 Pet itself:
+
+1. Install [T3 Code](https://github.com/pingdotgg/t3code) and open it once. T3 Pet finds it and signs in
+   by itself (read-only, see below).
+2. To see threads from another computer too, link the machines in T3 Code, not in the pet:
+   - On each machine: T3 Code → Settings → Labs → turn on **Linked environments**.
+   - On this computer: T3 Code → Settings → Connections → link the other machine.
+   - T3 Pet shows the new machine within about 10 seconds.
+
+If something is missing, the pet says what and offers the fix: **Open T3 Code** (or **Get T3 Code** when
+T3 is not installed) and **Check again**. Settings → *Connection* lists each machine, why a machine
+can't be reached (for example an expired link), and the same linking steps.
+
 ## How it reads T3
 
 T3 Pet uses T3's own tool interface, the same `/mcp` tools T3's `t3 thread` CLI uses

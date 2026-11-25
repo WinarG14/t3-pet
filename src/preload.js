@@ -20,8 +20,10 @@ contextBridge.exposeInMainWorld('pet', {
   menu: () => ipcRenderer.send('pet:menu'),
   // tasks
   tasks: () => ipcRenderer.invoke('tasks:get'),
+  refresh: () => ipcRenderer.invoke('tasks:refresh'),
   onTasks: fn => on('tasks:update', fn),
   focusT3: () => ipcRenderer.send('t3:focus'),
+  getT3: () => ipcRenderer.send('t3:get'),
   openThread: key => ipcRenderer.send('t3:openThread', String(key)),
   threadAction: (key, action) => ipcRenderer.invoke('thread:action', { key, action }),
   enableActions: () => ipcRenderer.invoke('actions:enable'),

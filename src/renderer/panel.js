@@ -180,14 +180,15 @@ function render() {
   const multiEnv = envs.length > 1;
   $('#moodLine').textContent = snap.ok
     ? `${p.mood.label}${multiEnv ? ` · ${envs.length} machines` : ''}`
-    : "Can't reach T3";
+    : (snap.problem ? p.mood.label : "Can't reach T3");
   const badge = $('#navBadge');
   badge.hidden = !need;
   badge.textContent = need;
 
   const notice = $('#notice');
-  notice.hidden = !(snap.notice || !snap.ok || envs.some(e => e.status === 'error'));
-  notice.textContent = !snap.ok ? snap.error : snap.notice || envs.filter(e => e.status === 'error').map(e => `Can't reach ${e.label} right now.`).join(' ');
+  const html = setupHtml(snap);
+  notice.hidden = !html;
+  if (notice._h !== html) { notice.innerHTML = html; notice._h = html; }
 
   const chips = GROUPS.map(g => {
     const n = g.states.reduce((s, st) => s + (c[st] || 0), 0);
@@ -198,6 +199,8 @@ function render() {
 
   const threads = snap.threads || [];
   const active = threads.filter(t => t.state !== 'idle');
+  // A filter whose group just emptied has no chip left to click: clear it instead of showing a blank list.
+  if (filter && !active.some(t => (GROUPS.find(g => g.name === filter) || { states: [] }).states.includes(t.state))) filter = null;
   const quiet = threads.filter(t => t.state === 'idle');
   const items = [];
   for (const g of GROUPS) {
@@ -216,6 +219,39 @@ function render() {
   $('#foot').textContent = snap.ok ? `Updated ${new Date(snap.at).toLocaleTimeString()} from ${src}.` : '';
   $('#actionsBanner').hidden = !actionsHint;
 }
+
+/** What is wrong with the connection, in plain words, with the buttons that fix it. '' when all is well. */
+function setupHtml(snap) {
+  const envs = snap.environments || [];
+  const down = envs.filter(e => e.status === 'error' || (e.status && e.status !== 'reachable'));
+  const pr = snap.problem;
+  let text = '';
+  if (pr) text = pr.code === 'not-running' ? `${pr.text} Showing this computer's threads only.` : pr.text;
+  else if (!snap.ok) text = snap.error || "T3 Pet can't read T3.";
+  else if (snap.notice) text = snap.notice;
+  const lines = down.map(e => `Can't reach ${esc(e.label)}${e.error ? `: ${esc(e.error)}` : ''}. Check that it is on and that T3 Code runs there.`);
+  if (!text && !lines.length) return '';
+  const btns = [];
+  if (pr && pr.code === 'not-installed') btns.push('<button class="btn primary small" data-setup="getT3">Get T3 Code</button>');
+  else if (pr || down.length || !snap.ok) btns.push('<button class="btn primary small" data-setup="openT3">Open T3 Code</button>');
+  if (pr || down.length || !snap.ok) btns.push('<button class="btn ghost small" data-setup="retry">Check again</button>');
+  return `${text ? `<div>${esc(text)}</div>` : ''}${lines.map(l => `<div>${l}</div>`).join('')}${btns.length ? `<div class="row-end">${btns.join('')}</div>` : ''}`;
+}
+async function setupAction(btn) {
+  const what = btn.dataset.setup;
+  if (what === 'openT3') return window.pet.focusT3();
+  if (what === 'getT3') return window.pet.getT3();
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const p = await window.pet.refresh();
+    if (p && p.snapshot) { last = p; render(); if (!document.querySelector('[data-view="settings"]').hidden) renderConnection(); }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Check again';
+  }
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-setup]'); if (b) setupAction(b); });
 
 window.pet.onTasks(p => { last = p; render(); });
 window.pet.tasks().then(p => { if (p && p.snapshot) { last = p; render(); } });
@@ -401,12 +437,31 @@ async function loadSettings() {
 function renderConnection() {
   const snap = last && last.snapshot;
   const envs = (snap && snap.environments) || [];
-  $('#connInfo').innerHTML = !snap
-    ? 'Connecting to T3…'
-    : snap.ok
-      ? envs.map(e => `<div class="connrow"><span class="d ${e.status !== 'reachable' ? 'off' : ''}"></span>${esc(e.isLocal ? `${e.label} (this computer)` : `${e.label} (linked)`)}</div>`).join('') +
-        `<div class="small" style="margin-top:6px">${snap.source === 'database' ? "Reading this computer's T3 database (linked machines are not visible in this mode)." : 'Reading T3 through its tools with a read-only sign-in named “T3 Pet (read-only)”.'}</div>`
-      : esc(snap.error || 'T3 Code is not running.');
+  const rows = !snap ? '<div>Connecting to T3…</div>'
+    : envs.map(e => {
+      const off = e.status !== 'reachable';
+      const why = off ? ` <span class="why">${esc(e.error || e.status || 'not reachable')}</span>` : '';
+      return `<div class="connrow"><span class="d ${off ? 'off' : ''}"></span><span>${esc(e.isLocal ? `${e.label} (this computer)` : `${e.label} (linked)`)}${why}</span></div>`;
+    }).join('');
+  const how = !snap ? '' : snap.source === 'database'
+    ? (snap.problem ? esc(snap.problem.text) : "Reading this computer's T3 database (linked machines are not visible in this mode).")
+    : 'Reading T3 through its tools with a read-only sign-in named “T3 Pet (read-only)”.';
+  const getOrOpen = snap && snap.problem && snap.problem.code === 'not-installed'
+    ? '<button class="btn primary small" data-setup="getT3">Get T3 Code</button>'
+    : '<button class="btn ghost small" data-setup="openT3">Open T3 Code</button>';
+  const conn = $('#connInfo');
+  const html = `${rows}<div class="small" style="margin-top:6px">${how}</div>
+    <div class="row-end" style="justify-content:flex-start">${getOrOpen}<button class="btn ghost small" data-setup="retry">Check again</button></div>
+    <details class="howto"><summary>Add another machine</summary><ol>
+      <li>On each machine, open T3 Code → Settings → Labs and turn on <b>Linked environments</b>.</li>
+      <li>On this computer, open T3 Code → Settings → Connections and link the other machine.</li>
+      <li>That's all. T3 Pet shows the new machine here within about 10 seconds; it needs no set-up of its own.</li>
+    </ol></details>`;
+  if (conn._h === html) return; // unchanged: keep the open "Add another machine" box and button states
+  const open = !!(conn.querySelector('.howto') || {}).open;
+  conn.innerHTML = html;
+  conn._h = html;
+  if (open) conn.querySelector('.howto').open = true;
 }
 window.pet.onTasks(() => { if (!document.querySelector('[data-view="settings"]').hidden) renderConnection(); });
 async function save(patch) {

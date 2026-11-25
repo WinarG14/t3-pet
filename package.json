@@ -1,6 +1,6 @@
 {
   "name": "t3-pet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A desktop pet for T3 Code: shows your running and waiting threads on every linked machine, nudges you when a task needs a decision or finishes, and hatches new Codex-compatible pets with GPT image models.",
   "main": "src/main.js",
   "scripts": {

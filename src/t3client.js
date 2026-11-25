@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const IS_WIN = process.platform === 'win32';
+const VERSION = require('../package.json').version;
 const READ_LABEL = 'T3 Pet (read-only)';
 const ACTIONS_LABEL = 'T3 Pet (actions)';
 
@@ -71,7 +72,7 @@ class McpSession {
   async init() {
     if (!this.ready) {
       this.ready = (async () => {
-        await this.post({ jsonrpc: '2.0', id: this.nextId++, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't3-pet', version: '0.2.0' } } });
+        await this.post({ jsonrpc: '2.0', id: this.nextId++, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't3-pet', version: VERSION } } });
         await this.post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
       })().catch(e => { this.ready = null; throw e; });
     }
@@ -113,6 +114,12 @@ class T3Client {
     this.log = log;
     this.home = t3Home();
     this.sessions = {};
+    this.lastIssueAttempt = 0;
+    this.lastIssueError = null;
+  }
+
+  /** Forget the 60-second wait between token requests (the user clicked "Check again"). */
+  resetBackoff() {
     this.lastIssueAttempt = 0;
   }
 
@@ -173,11 +180,18 @@ class T3Client {
     let cred = forceNew ? null : this.loadSecret('read');
     if (cred && cred.expiresAt && Date.parse(cred.expiresAt) < Date.now() + 3600e3) cred = null;
     if (cred) return cred;
-    if (Date.now() - this.lastIssueAttempt < 60e3) throw new McpError('Waiting before asking T3 for a new token', { code: 'backoff' });
+    // During the wait, repeat the last real reason (for example "CLI not found"), not a generic one.
+    if (Date.now() - this.lastIssueAttempt < 60e3) throw this.lastIssueError || new McpError('Waiting before asking T3 for a new sign-in', { code: 'backoff' });
     this.lastIssueAttempt = Date.now();
-    if (!this.cliAvailable()) throw new McpError(`T3's command-line tool was not found at ${this.cliPath}. Open T3 Code once so it installs it.`, { code: 'no_cli' });
+    this.lastIssueError = null;
+    try {
+      if (!this.cliAvailable()) throw new McpError(`T3's command-line tool was not found at ${this.cliPath}. Open T3 Code once so it installs it.`, { code: 'no_cli' });
+      cred = await this.issueSession(['--subject', 'mcp-client', '--scope', 'orchestration:read', '--ttl', '30d', '--label', READ_LABEL]);
+    } catch (e) {
+      this.lastIssueError = e;
+      throw e;
+    }
     const old = this.loadSecret('read');
-    cred = await this.issueSession(['--subject', 'mcp-client', '--scope', 'orchestration:read', '--ttl', '30d', '--label', READ_LABEL]);
     this.saveSecret('read', cred);
     if (old && old.sessionId && old.sessionId !== cred.sessionId) this.revokeSession(old.sessionId);
     this.log('Issued a read-only T3 session for T3 Pet.');

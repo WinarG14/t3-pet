@@ -177,7 +177,14 @@ function localEnvironmentId() {
   try { return fs.readFileSync(path.join(watcher.T3_DIR, 'environment-id'), 'utf8').trim(); } catch { return null; }
 }
 function focusT3() {
-  return openT3App(settings.t3App);
+  // The saved path can go stale (T3 moved, renamed, or the default was saved before T3 was installed).
+  if (!settings.t3App || !fs.existsSync(settings.t3App)) {
+    const found = defaultT3App();
+    if (found && fs.existsSync(found) && found !== settings.t3App) { settings.t3App = found; saveSettings(); }
+  }
+  if (openT3App(settings.t3App)) return true;
+  shell.openExternal('t3code://').catch(() => {}); // last resort: T3's own link scheme starts or focuses it
+  return false;
 }
 // T3's own link format: t3code://threads/<environmentId>/<threadId>. Works for linked environments too.
 function openThread(key) {
@@ -387,6 +394,12 @@ async function poll() {
   }
 }
 
+/** Poll now, after any poll that is already running (a click on "Check again" must not be skipped). */
+async function pollNow() {
+  for (let i = 0; polling && i < 400; i++) await new Promise(r => setTimeout(r, 100));
+  await poll();
+}
+
 function startPolling() {
   clearInterval(pollTimer);
   poll();
@@ -413,7 +426,11 @@ function trayMenu() {
     { type: 'separator' },
     { label: petVisible() ? 'Hide pet' : 'Show pet', click: togglePet },
     { label: 'Bring pet back', click: resetPet },
-    { label: Date.now() < mutedUntil ? 'Unmute notifications' : 'Mute notifications for 1 hour', click: () => { mutedUntil = Date.now() < mutedUntil ? 0 : Date.now() + 3600e3; tray.setContextMenu(trayMenu()); } },
+    { label: Date.now() < mutedUntil ? 'Unmute notifications' : 'Mute notifications for 1 hour', click: () => {
+      mutedUntil = Date.now() < mutedUntil ? 0 : Date.now() + 3600e3;
+      tray.setContextMenu(trayMenu());
+      if (mutedUntil) setTimeout(() => { if (tray && Date.now() >= mutedUntil) tray.setContextMenu(trayMenu()); }, 3600e3 + 1000);
+    } },
     { label: 'Settings', click: () => openPanel('settings') },
     { type: 'separator' },
     { label: 'Quit T3 Pet', click: () => { app.isQuitting = true; app.quit(); } },
@@ -472,6 +489,12 @@ function setPet(id) {
 // ---------------- IPC ----------------
 ipcMain.handle('pet:config', () => petConfig());
 ipcMain.handle('tasks:get', () => ({ snapshot, mood: watcher.petMood(snapshot) }));
+ipcMain.handle('tasks:refresh', async () => {
+  t3.resetBackoff();
+  tasks.refreshRemotes();
+  await pollNow();
+  return { snapshot, mood: watcher.petMood(snapshot) };
+});
 ipcMain.on('pet:mouse', (_e, capture) => { if (petWin) petWin.setIgnoreMouseEvents(!capture, { forward: true }); });
 ipcMain.on('pet:drag', (_e, d) => {
   if (!petWin || !d || !Number.isFinite(d.dx) || !Number.isFinite(d.dy)) return;
@@ -488,13 +511,15 @@ ipcMain.handle('pet:layout', () => petLayout().sprite);
 ipcMain.on('pet:click', () => togglePanel('tasks'));
 ipcMain.on('pet:menu', () => trayMenu().popup({ window: petWin }));
 ipcMain.on('t3:focus', () => focusT3());
+ipcMain.on('t3:get', () => shell.openExternal('https://github.com/pingdotgg/t3code').catch(() => {}));
 ipcMain.on('t3:openThread', (_e, key) => { if (typeof key === 'string') openThread(key); });
 ipcMain.on('panel:pin', (_e, pinned) => { panelPinned = !!pinned; });
 ipcMain.on('panel:close', () => { if (panelWin) panelWin.hide(); });
 ipcMain.handle('pet:visibility', () => ({ visible: petVisible() }));
 ipcMain.handle('pet:setVisible', (_e, show, source) => { setPetVisible(!!show, typeof source === 'string' ? source.slice(0, 40) : 'panel'); return { visible: petVisible() }; });
 ipcMain.handle('pet:reset', () => { resetPet(); return { visible: petVisible() }; });
-ipcMain.handle('thread:action', async (_e, { key, action }) => {
+ipcMain.handle('thread:action', async (_e, req) => {
+  const { key, action } = req || {};
   try {
     await tasks.act(String(key), String(action));
     poll();
@@ -513,8 +538,9 @@ ipcMain.handle('actions:disable', async () => {
 
 ipcMain.handle('settings:get', () => publicSettings());
 ipcMain.handle('settings:set', (_e, patch) => {
+  if (!patch || typeof patch !== 'object') return publicSettings();
   const allowed = ['motion', 'normalizeSize', 'scale', 'pollMs', 'remotePollMs', 'lookbackHours', 'dataSource', 'preciseLocalUnread', 'notify', 'sound', 'autoFallback', 'fallbackOrder', 'falModel', 'veniceEditModel', 'veniceModel', 'codexCmd', 'codexModel', 'pythonCmd', 'apiConcurrency', 't3DbPath', 't3App', 'openAtLogin'];
-  for (const k of allowed) if (patch && k in patch) settings[k] = patch[k];
+  for (const k of allowed) if (k in patch) settings[k] = patch[k];
   saveSettings();
   if ('openAtLogin' in patch) setLoginItem(!!patch.openAtLogin);
   if (['pollMs', 't3DbPath', 'lookbackHours', 'dataSource'].some(k => k in patch)) startPolling();

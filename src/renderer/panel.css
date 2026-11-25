@@ -267,3 +267,12 @@ pre#bLog { max-height: 200px; overflow: auto; font: 11px/1.4 ui-monospace, "Casc
 .toast.show { opacity: 1; transform: none; }
 .toast.ok { border-color: color-mix(in srgb, var(--done) 50%, transparent); }
 .toast.error { border-color: color-mix(in srgb, var(--fail) 60%, transparent); background: color-mix(in srgb, var(--fail) 14%, var(--surface3)); }
+
+/* set-up help: reasons and fix buttons for the connection */
+.notice .row-end { margin-top: 8px; justify-content: flex-start; }
+.notice > div + div { margin-top: 4px; }
+.connrow .why { color: var(--fail); font-size: 11px; }
+.howto { margin-top: 10px; }
+.howto summary { cursor: pointer; color: var(--fg); font-weight: 600; }
+.howto ol { margin: 6px 0 0; padding-left: 18px; }
+.howto li { margin: 3px 0; }

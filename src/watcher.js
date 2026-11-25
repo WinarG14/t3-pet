@@ -239,8 +239,15 @@ function diffSnapshots(prev, next) {
   if (!prev || !prev.ok || !next.ok) return [];
   const keyOf = t => t.key || t.id;
   const before = new Map(prev.threads.map(t => [keyOf(t), t]));
+  // A machine the previous snapshot could not see (T3 started after the pet, a link came back) is new
+  // to the pet, not new to the user: take its threads as they are, without a notification burst.
+  const seenEnvs = new Set([
+    ...(prev.environments || []).filter(e => e.status !== 'error').map(e => e.id),
+    ...prev.threads.map(t => t.envId),
+  ]);
   const events = [];
   for (const t of next.threads) {
+    if (t.envId && !seenEnvs.has(t.envId)) continue;
     const b = before.get(keyOf(t));
     const was = b ? b.state : 'idle';
     if (t.state === was && (!b || b.runId === t.runId)) continue;
@@ -254,6 +261,9 @@ function diffSnapshots(prev, next) {
 
 /** The pet's overall mood: the most urgent thread state, mapped to a Codex pet animation row. */
 function petMood(snapshot) {
+  if (snapshot && snapshot.problem && ['not-installed', 'not-running', 'no-cli'].includes(snapshot.problem.code) && !snapshot.ok) {
+    return { anim: 'idle', label: 'Waiting for T3' }; // a set-up step, not a failure: keep the pet calm
+  }
   if (!snapshot || !snapshot.ok) return { anim: 'failed', label: 'Cannot read T3' };
   const c = snapshot.counts || {};
   const need = (c.waiting || 0) + (c['needs-reply'] || 0);
