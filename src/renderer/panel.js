@@ -35,7 +35,7 @@ $('#pinBtn').addEventListener('click', () => {
 $('#closeBtn').addEventListener('click', () => window.pet.close());
 $('#openT3').addEventListener('click', () => window.pet.focusT3());
 document.addEventListener('keydown', e => { if (e.key === 'Escape') window.pet.close(); });
-for (const [id, name] of [['#icoLink', 'link'], ['#icoShield', 'shield'], ['#icoBell', 'bell'], ['#icoPaw', 'paw'], ['#icoKey', 'key']]) $(id).innerHTML = ico(name);
+for (const [id, name] of [['#icoBellOff', 'bellOff'], ['#icoLink', 'link'], ['#icoShield', 'shield'], ['#icoBell', 'bell'], ['#icoPaw', 'paw'], ['#icoKey', 'key']]) $(id).innerHTML = ico(name);
 $('#openPets').innerHTML = ico('folder') + 'Open folder';
 document.querySelector('.ref-icon').innerHTML = ico('image');
 for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = ico(el.dataset.icon);
@@ -113,16 +113,19 @@ function taskParts(t, multiEnv) {
     ['settle', 'check', finished ? 'Settle (mark as handled)' : 'Settle when this turn ends'],
     ...(finished ? [['mark_unread', 'unread', 'Mark unread']] : []),
     ['snooze', 'snooze', 'Snooze for 1 hour'],
-    ...(t.state !== 'idle' ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
+    ...(t.state !== 'idle' && !t.muted ? [['dismiss', 'eyeOff', 'Hide from the pet until it changes']] : []),
+    t.muted
+      ? ['unmute', 'bell', `Unmute ${t.mutedBy === 'schedule' ? `schedule “${t.scheduleTitle}”` : `project “${t.project || 'this project'}”`}`]
+      : ['mute', 'bellOff', t.scheduleKey ? `Mute schedule “${t.scheduleTitle}” (no notifications)` : `Mute project “${t.project || 'this project'}” (no notifications)`],
   ];
   return {
     cls: `task ${t.state}`,
     ic: `<div class="ic ${['running', 'waiting', 'needs-reply'].includes(t.state) ? 'pulse' : ''}">${ico(STATE_ICON[t.state] || 'dot')}</div>`,
     body: `<div class="t">${esc(t.title)}</div>
-      <div class="meta"><span>${LABEL[t.state]}</span>${t.project ? `<span>· ${esc(t.project)}</span>` : ''}<span>· ${ago(t.completedAt || t.updatedAt)}</span>${machine}</div>
+      <div class="meta">${t.muted ? '<span class="mtag">Muted</span>' : ''}<span>${LABEL[t.state]}</span>${t.project ? `<span>· ${esc(t.project)}</span>` : ''}<span>· ${ago(t.completedAt || t.updatedAt)}</span>${machine}</div>
       ${t.detail ? `<div class="detail">${esc(t.detail)}</div>` : ''}
       ${stepsHtml(t.steps)}`,
-    acts: acts.map(([a, i, title]) => `<button data-act="${a}" title="${title}">${ico(i)}</button>`).join(''),
+    acts: acts.map(([a, i, title]) => `<button data-act="${a}" title="${esc(title)}" aria-label="${esc(title)}">${ico(i)}</button>`).join(''),
   };
 }
 
@@ -198,10 +201,10 @@ function render() {
   $('#chips').hidden = !chips;
 
   const threads = snap.threads || [];
-  const active = threads.filter(t => t.state !== 'idle');
+  const active = threads.filter(t => t.state !== 'idle' && !t.muted);
   // A filter whose group just emptied has no chip left to click: clear it instead of showing a blank list.
   if (filter && !active.some(t => (GROUPS.find(g => g.name === filter) || { states: [] }).states.includes(t.state))) filter = null;
-  const quiet = threads.filter(t => t.state === 'idle');
+  const quiet = threads.filter(t => t.state === 'idle' || t.muted);
   const items = [];
   for (const g of GROUPS) {
     if (filter && filter !== g.name) continue;
@@ -281,8 +284,58 @@ function say(text, kind = 'info') {
 window.say = say;
 
 const DONE_TEXT = { settle: 'Settled', mark_unread: 'Marked unread', snooze: 'Snoozed for 1 hour', dismiss: 'Hidden until it changes' };
+// ---------- muting (Settings > Muted projects and schedules, and the bell button on a task) ----------
+function isMuted(kind, key) {
+  return !!(S && S.muted && (S.muted[kind] || []).includes(key));
+}
+async function setMuted(kind, key, on) {
+  if (!S) S = await window.pet.settings();
+  const m = { projects: [...((S.muted && S.muted.projects) || [])], schedules: [...((S.muted && S.muted.schedules) || [])] };
+  m[kind] = on ? [...new Set([...m[kind], key])] : m[kind].filter(k => k !== key);
+  await save({ muted: m });
+  renderMuted(true);
+}
+async function muteAction(key, act) {
+  const t = last && last.snapshot && (last.snapshot.threads || []).find(x => x.key === key);
+  if (!t) return;
+  if (act === 'mute') {
+    if (t.scheduleKey) await setMuted('schedules', t.scheduleKey, true);
+    else await setMuted('projects', t.projectKey, true);
+    say(`Muted ${t.scheduleKey ? `“${t.scheduleTitle}”` : `“${t.project || 'this project'}”`}. It stays under Recent quiet threads; unmute it there or in Settings.`, 'ok');
+  } else {
+    if (t.mutedBy === 'schedule') await setMuted('schedules', t.scheduleKey, false);
+    else await setMuted('projects', t.projectKey, false);
+    say('Unmuted', 'ok');
+  }
+}
+function every(ms) {
+  if (!ms) return '';
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `every ${m} min`;
+  if (m % 1440 === 0) return m === 1440 ? 'every day' : `every ${m / 1440} days`;
+  return m % 60 ? `every ${(m / 60).toFixed(1)} h` : `every ${m / 60} h`;
+}
+function renderMuted(force) {
+  const box = $('#mutedList');
+  const snap = last && last.snapshot;
+  const row = (kind, key, title, sub) => `<label class="switch mrow"><input type="checkbox" data-mute="${kind}" data-key="${esc(key)}" ${isMuted(kind, key) ? 'checked' : ''}><i></i><span title="${esc(title + (sub ? ' · ' + sub : ''))}"><span class="mt">${esc(title)}</span><span class="ms">${esc(sub)}</span></span></label>`;
+  const scheds = (snap && snap.schedules) || [];
+  const projects = (snap && snap.projects) || [];
+  const html = !snap ? '<p class="muted small">Connecting to T3…</p>'
+    : `<div class="mhead">Schedules</div>${scheds.length ? scheds.map(x => row('schedules', x.key, x.title, [every(x.everyMs), x.enabled ? '' : 'paused', x.project, x.envLabel].filter(Boolean).join(' · '))).join('') : `<p class="muted small">${snap.source === 'database' ? 'Schedules show when T3 Code runs.' : 'No scheduled tasks in T3.'}</p>`}
+      <div class="mhead">Projects</div>${projects.length ? projects.map(x => row('projects', x.key, x.name, x.envLabel)).join('') : '<p class="muted small">No recent projects.</p>'}`;
+  if (!force && box._h === html) return;
+  box.innerHTML = html;
+  box._h = html;
+}
+$('#mutedList').addEventListener('change', e => {
+  const cb = e.target.closest('[data-mute]');
+  if (cb) setMuted(cb.dataset.mute, cb.dataset.key, cb.checked);
+});
+
 async function doAction(key, act, cardEl) {
   if (act === 'open') return window.pet.openThread(key);
+  if (act === 'mute' || act === 'unmute') return muteAction(key, act);
   if (cardEl) cardEl.style.opacity = '.55';
   const r = await window.pet.threadAction(key, act);
   if (cardEl) cardEl.style.opacity = '';
@@ -404,6 +457,7 @@ window.pet.builderStatus().then(renderBuilder);
 const TEXT = ['falModel', 'veniceEditModel', 'veniceModel', 'pythonCmd', 'codexModel', 't3App'];
 const NUM = ['pollMs', 'remotePollMs', 'lookbackHours'];
 let S = null;
+window.pet.settings().then(v => { if (!S) S = v; }); // the bell button on tasks reads the mute list
 async function loadSettings() {
   S = await window.pet.settings();
   for (const k of TEXT) $('#' + k).value = S[k] || '';
@@ -433,6 +487,7 @@ async function loadSettings() {
   });
   if ($('#actOff')) $('#actOff').addEventListener('click', async () => { await window.pet.disableActions(); loadSettings(); });
   renderConnection();
+  renderMuted(true);
 }
 function renderConnection() {
   const snap = last && last.snapshot;
@@ -463,7 +518,7 @@ function renderConnection() {
   conn._h = html;
   if (open) conn.querySelector('.howto').open = true;
 }
-window.pet.onTasks(() => { if (!document.querySelector('[data-view="settings"]').hidden) renderConnection(); });
+window.pet.onTasks(() => { if (!document.querySelector('[data-view="settings"]').hidden) { renderConnection(); renderMuted(); } });
 async function save(patch) {
   S = await window.pet.setSettings(patch);
   $('#saved').textContent = 'Saved ' + new Date().toLocaleTimeString();

@@ -194,6 +194,7 @@ function readSnapshot({ dbPath = DEFAULT_DB, lookbackHours = 72 } = {}) {
         id: row.thread_id,
         title: row.title || 'Untitled thread',
         project: projects.get(row.project_id) || '',
+        projectId: row.project_id,
         state,
         detail,
         steps,
@@ -249,6 +250,7 @@ function diffSnapshots(prev, next) {
     : new Set(prev.threads.map(t => t.envId));
   const events = [];
   for (const t of next.threads) {
+    if (t.muted) continue; // muted project or schedule: never a notification
     if (t.envId && !seenEnvs.has(t.envId)) continue;
     const b = before.get(keyOf(t));
     // The first read of an old thread sets its state; no alert, unless T3's list shows a real change.

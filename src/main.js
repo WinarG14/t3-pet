@@ -53,6 +53,7 @@ const DEFAULTS = {
   keys: {},
   secrets: {},
   openAtLogin: false,
+  muted: { projects: [], schedules: [] }, // "<environmentId>/<projectId>" and "<environmentId>/<scheduledTaskId>"
 };
 
 let settings = loadSettings();
@@ -543,11 +544,16 @@ ipcMain.handle('actions:disable', async () => {
 ipcMain.handle('settings:get', () => publicSettings());
 ipcMain.handle('settings:set', (_e, patch) => {
   if (!patch || typeof patch !== 'object') return publicSettings();
-  const allowed = ['motion', 'normalizeSize', 'scale', 'pollMs', 'remotePollMs', 'lookbackHours', 'dataSource', 'preciseLocalUnread', 'notify', 'sound', 'autoFallback', 'fallbackOrder', 'falModel', 'veniceEditModel', 'veniceModel', 'codexCmd', 'codexModel', 'pythonCmd', 'apiConcurrency', 't3DbPath', 't3App', 'openAtLogin'];
+  const allowed = ['motion', 'normalizeSize', 'scale', 'pollMs', 'remotePollMs', 'lookbackHours', 'dataSource', 'preciseLocalUnread', 'notify', 'sound', 'autoFallback', 'fallbackOrder', 'falModel', 'veniceEditModel', 'veniceModel', 'codexCmd', 'codexModel', 'pythonCmd', 'apiConcurrency', 't3DbPath', 't3App', 'openAtLogin', 'muted'];
   for (const k of allowed) if (k in patch) settings[k] = patch[k];
+  if ('muted' in patch) { // keep only lists of short strings
+    const list = v => (Array.isArray(v) ? v : []).filter(x => typeof x === 'string' && x.length < 400).slice(0, 500);
+    const m = patch.muted || {};
+    settings.muted = { projects: list(m.projects), schedules: list(m.schedules) };
+  }
   saveSettings();
   if ('openAtLogin' in patch) setLoginItem(!!patch.openAtLogin);
-  if (['pollMs', 't3DbPath', 'lookbackHours', 'dataSource'].some(k => k in patch)) startPolling();
+  if (['pollMs', 't3DbPath', 'lookbackHours', 'dataSource', 'muted'].some(k => k in patch)) startPolling();
   if (['scale', 'motion', 'normalizeSize'].some(k => k in patch)) send(petWin, 'pet:config', petConfig());
   if ('scale' in patch) applyPetLayout();
   return publicSettings();

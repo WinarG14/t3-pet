@@ -191,7 +191,7 @@ function renderSummary() {
     const pr = snapshot.problem;
     return `<div class="head">${pr ? esc(mood.label) : "I can't read T3"}</div><div class="d">${esc(pr ? pr.text : snapshot.error)}</div><div class="more">Click me to fix it</div>`;
   }
-  const active = snapshot.threads.filter(t => t.state !== 'idle');
+  const active = snapshot.threads.filter(t => t.state !== 'idle' && !t.muted);
   if (!active.length) return `<div class="head"><span class="mood idle"></span>All caught up</div><div class="d solo">Nothing is running or waiting for you. Click me for the task list.</div>`;
   const multi = (snapshot.environments || []).length > 1;
   const rows = active.slice(0, 3).map(t => rowHtml(t.key || t.id, t.state, t.title, t.detail, LABEL[t.state], multi && !t.isLocal ? t.envLabel : '')).join('');

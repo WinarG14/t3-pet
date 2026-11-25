@@ -113,6 +113,8 @@ const emptyOutage = { ...both, environments: [local, { id: 'pc', status: 'error'
 assert.deepStrictEqual(w.diffSnapshots(emptyOutage, { ...both, threads: [th('mac', 'a', 'done'), th('pc', 'd', 'waiting')] }).map(e => e.kind + ':' + e.thread.key), ['waiting:pc/d'], 'a hiccup on a machine with an empty list: a new request still alerts');
 const stp = (k, state, status, provisional) => ({ ...th('pc', k, state), status, provisional });
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [stp('f', 'running', 'running', true)] }, { ...both, threads: [stp('f', 'waiting', 'waiting', false)] }).length, 1, 'an unread thread whose T3 status changed still alerts');
+const mutedLater = { ...both, threads: [th('mac', 'a', 'done'), th('pc', 'b', 'needs-reply'), th('pc', 'c', 'failed'), { ...th('pc', 'd', 'waiting'), muted: true }] };
+assert.deepStrictEqual(w.diffSnapshots(both, mutedLater), [], 'a muted project or schedule never notifies');
 // The first detail read of a thread (pending approvals, a question at the end) is its starting state.
 const pv = (k, state, provisional) => ({ ...th('pc', k, state), provisional });
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [pv('e', 'running', true)] }, { ...both, threads: [pv('e', 'waiting', false)] }), [], 'first read: no alert');

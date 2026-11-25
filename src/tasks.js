@@ -49,6 +49,19 @@ function problemFrom(e) {
   return { code: 'error', text: `T3 Pet can't read T3 (${(e && e.message) || 'unknown error'}).` };
 }
 
+/** Muted project and schedule keys ("<environmentId>/<id>") from settings. */
+function mutedSets(s) {
+  const m = (s && s.muted) || {};
+  return { projects: new Set(m.projects || []), schedules: new Set(m.schedules || []) };
+}
+
+/** Counts per state, without muted threads: they don't move the pet, the badge or the chips. */
+function countStates(threads) {
+  const counts = {};
+  for (const t of threads || []) if (!t.muted) counts[t.state] = (counts[t.state] || 0) + 1;
+  return counts;
+}
+
 class TaskSource {
   /**
    * @param {object} o
@@ -68,6 +81,7 @@ class TaskSource {
     this.dismissed = new Map();  // thread key -> 'runId|status' hidden in the pet until that changes
     this.last = null;
     this.firstSeen = new Map(); // envId -> when the pet first listed that machine's threads
+    this.schedules = new Map(); // envKey -> { at, tasks } (T3 scheduled tasks, for muting)
   }
 
   async environments() {
@@ -94,6 +108,22 @@ class TaskSource {
     }
     this.projects.set(k, { at: Date.now(), names });
     return names;
+  }
+
+  /** T3's scheduled tasks on one machine (cached 5 minutes). Used to mute automation threads. */
+  async scheduleList(envId, isLocal) {
+    const k = isLocal ? 'local' : envId;
+    const c = this.schedules.get(k);
+    if (c && Date.now() - c.at < 5 * 60e3) return c.tasks;
+    let tasks = c ? c.tasks : [];
+    try {
+      const r = await this.client.call('list_scheduled_tasks', isLocal ? {} : { environmentId: envId });
+      tasks = r.tasks || [];
+    } catch (e) {
+      this.log(`Could not list scheduled tasks: ${e.message}`);
+    }
+    this.schedules.set(k, { at: Date.now(), tasks });
+    return tasks;
   }
 
   async listThreads(envId, isLocal) {
@@ -229,11 +259,22 @@ class TaskSource {
     }
 
     const names = new Map();
+    const scheds = new Map();
     for (const env of environments) {
-      if (env.isLocal || env.status === 'reachable') names.set(env.id, await this.projectNames(env.id, env.isLocal).catch(() => new Map()));
+      if (env.isLocal || env.status === 'reachable') {
+        names.set(env.id, await this.projectNames(env.id, env.isLocal).catch(() => new Map()));
+        scheds.set(env.id, await this.scheduleList(env.id, env.isLocal));
+      }
     }
+    const muted = mutedSets(s);
     const out = [];
     for (const t of candidates) {
+      // Which schedule made this thread: its bound thread, or a new thread per run with the schedule's title.
+      const sc = (scheds.get(t.envId) || []).find(x => x.boundThreadId === t.id || (!x.boundThreadId && x.projectId === t.projectId && x.title === t.title));
+      if (sc) Object.assign(t, { scheduleKey: `${t.envId}/${sc.scheduledTaskId}`, scheduleTitle: sc.title || 'Scheduled task' });
+      t.projectKey = `${t.envId}/${t.projectId}`;
+      t.mutedBy = t.scheduleKey && muted.schedules.has(t.scheduleKey) ? 'schedule' : muted.projects.has(t.projectKey) ? 'project' : null;
+      t.muted = !!t.mutedBy;
       const r = this.reads.get(t.key) || {};
       if (r.completedAt && r.runId === t.runId) t.completedAt = r.completedAt;
       // Not read yet: its state (for example "waiting" or "needs a reply") is still a guess, so the
@@ -254,10 +295,21 @@ class TaskSource {
     }
     const rank = { waiting: 0, 'needs-reply': 1, failed: 2, running: 3, stale: 4, done: 5, stopped: 6, idle: 7 };
     out.sort((a, b) => (rank[a.state] - rank[b.state]) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
-    const counts = {};
-    for (const t of out) counts[t.state] = (counts[t.state] || 0) + 1;
+    // Lists for Settings > Muted: every schedule, and every project that has recent threads or a schedule.
+    const envLabel = id => (environments.find(e => e.id === id) || {}).label || id;
+    const schedules = [];
+    const projects = new Map();
+    for (const [envId, list] of scheds) {
+      for (const x of list) {
+        const project = (names.get(envId) || new Map()).get(x.projectId) || '';
+        schedules.push({ key: `${envId}/${x.scheduledTaskId}`, title: x.title || 'Scheduled task', everyMs: x.schedule && x.schedule.everyMs, enabled: x.enabled !== false, project, envLabel: envLabel(envId) });
+        if (x.projectId) projects.set(`${envId}/${x.projectId}`, { key: `${envId}/${x.projectId}`, name: project || 'Untitled project', envLabel: envLabel(envId) });
+      }
+    }
+    for (const t of out) if (t.projectId) projects.set(t.projectKey, { key: t.projectKey, name: t.project || 'Untitled project', envLabel: t.envLabel });
     this.last = {
-      ok: true, source: 'mcp', serverAlive: true, threads: out, counts, at: new Date().toISOString(),
+      ok: true, source: 'mcp', serverAlive: true, threads: out, counts: countStates(out), at: new Date().toISOString(),
+      schedules, projects: [...projects.values()].sort((a, b) => a.name.localeCompare(b.name)),
       environments: environments.map(e => ({ id: e.id, label: e.label, isLocal: e.isLocal, status: e.error ? 'error' : e.status, error: e.error || null, cached: !!e.cached })),
     };
     return this.last;
@@ -274,6 +326,9 @@ class TaskSource {
     const snap = watcher.readSnapshot({ dbPath: this.getSettings().t3DbPath, lookbackHours: this.getSettings().lookbackHours });
     const envId = (() => { try { return require('fs').readFileSync(require('path').join(watcher.T3_DIR, 'environment-id'), 'utf8').trim(); } catch { return 'local'; } })();
     for (const t of snap.threads || []) Object.assign(t, { key: `${envId}/${t.id}`, envId, envLabel: os.hostname(), isLocal: true });
+    const muted = mutedSets(this.getSettings());
+    for (const t of snap.threads || []) { t.projectKey = `${envId}/${t.projectId}`; t.mutedBy = muted.projects.has(t.projectKey) ? 'project' : null; t.muted = !!t.mutedBy; }
+    if (snap.ok) snap.counts = countStates(snap.threads);
     snap.source = 'database';
     snap.notice = problem ? `${problem.text} Showing this computer's threads only.` : 'Showing this computer only';
     snap.problem = problem || null;

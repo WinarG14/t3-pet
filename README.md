@@ -115,6 +115,19 @@ database only and says so.
 > The `--subject mcp-client` flag is what T3's MCP endpoint expects from tool clients today. It is
 > not a documented contract, so a future T3 update may change it.
 
+## Mute projects and schedules
+
+Some threads are noise, for example an automation that T3 runs every 30 minutes. Mute them:
+
+- **From a task:** hover it in the panel and click the bell. A thread that a T3 scheduled task made mutes
+  that schedule; any other thread mutes its project.
+- **In Settings → Muted projects and schedules:** a switch for each T3 scheduled task (with how often it
+  runs) and each recent project, on every machine.
+
+A muted thread sends no notification and does not change the pet, its bubble or the badge. It still shows
+under *Recent quiet threads* with a *Muted* tag, where the bell unmutes it. T3 Pet finds a schedule's
+threads by the schedule's own thread, or by the schedule's project and title.
+
 ## Thread actions
 
 *Settle*, *mark unread* and *snooze* change thread state, and T3 only lets a caller organize threads that
