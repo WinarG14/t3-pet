@@ -21,19 +21,23 @@ function defaultT3App() {
   return candidates.find(p => fs.existsSync(p)) || candidates[0] || '';
 }
 
-/** Bring T3 Code to the front (or start it). */
-function openT3App(appPath) {
+/** Bring T3 Code to the front (or start it). Calls onFail() when that did not work. */
+function openT3App(appPath, onFail = () => {}) {
   try {
     if (IS_MAC) {
-      spawn('open', appPath && fs.existsSync(appPath) ? ['-a', appPath] : ['-a', 'T3 Code (Beta)'], { detached: true, stdio: 'ignore' }).unref();
-      return true;
+      const child = spawn('open', appPath && fs.existsSync(appPath) ? ['-a', appPath] : ['-a', 'T3 Code (Beta)'], { stdio: 'ignore' });
+      child.on('error', onFail);
+      child.on('exit', code => { if (code) onFail(); }); // `open` exits 1 when it cannot find the app
+      return;
     }
     if (appPath && fs.existsSync(appPath)) {
-      spawn(appPath, [], { detached: true, stdio: 'ignore' }).unref();
-      return true;
+      const child = spawn(appPath, [], { detached: true, stdio: 'ignore' });
+      child.on('error', onFail);
+      child.unref();
+      return;
     }
   } catch {}
-  return false;
+  onFail();
 }
 
 /**

@@ -87,7 +87,7 @@ There is nothing to set up in T3 Pet itself:
 2. To see threads from another computer too, link the machines in T3 Code, not in the pet:
    - On each machine: T3 Code → Settings → Labs → turn on **Linked environments**.
    - On this computer: T3 Code → Settings → Connections → link the other machine.
-   - T3 Pet shows the new machine within about 10 seconds.
+   - T3 Pet shows the new machine within about a minute, or at once when you click **Check again**.
 
 If something is missing, the pet says what and offers the fix: **Open T3 Code** (or **Get T3 Code** when
 T3 is not installed) and **Check again**. Settings → *Connection* lists each machine, why a machine

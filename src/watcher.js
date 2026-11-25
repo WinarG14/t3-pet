@@ -249,6 +249,7 @@ function diffSnapshots(prev, next) {
   for (const t of next.threads) {
     if (t.envId && !seenEnvs.has(t.envId)) continue;
     const b = before.get(keyOf(t));
+    if (t.provisional || (b && b.provisional)) continue; // the first read of a thread sets its state; no alert
     const was = b ? b.state : 'idle';
     if (t.state === was && (!b || b.runId === t.runId)) continue;
     if (t.state === 'waiting' && was !== 'waiting') events.push({ kind: 'waiting', thread: t });
@@ -261,7 +262,7 @@ function diffSnapshots(prev, next) {
 
 /** The pet's overall mood: the most urgent thread state, mapped to a Codex pet animation row. */
 function petMood(snapshot) {
-  if (snapshot && snapshot.problem && ['not-installed', 'not-running', 'no-cli'].includes(snapshot.problem.code) && !snapshot.ok) {
+  if (snapshot && snapshot.problem && ['not-installed', 'not-started', 'not-running', 'no-cli'].includes(snapshot.problem.code) && !snapshot.ok) {
     return { anim: 'idle', label: 'Waiting for T3' }; // a set-up step, not a failure: keep the pet calm
   }
   if (!snapshot || !snapshot.ok) return { anim: 'failed', label: 'Cannot read T3' };

@@ -223,10 +223,10 @@ function render() {
 /** What is wrong with the connection, in plain words, with the buttons that fix it. '' when all is well. */
 function setupHtml(snap) {
   const envs = snap.environments || [];
-  const down = envs.filter(e => e.status === 'error' || (e.status && e.status !== 'reachable'));
+  const down = envs.filter(e => !e.isLocal && (e.status === 'error' || (e.status && e.status !== 'reachable')));
   const pr = snap.problem;
   let text = '';
-  if (pr) text = pr.code === 'not-running' ? `${pr.text} Showing this computer's threads only.` : pr.text;
+  if (pr) text = pr.code === 'not-running' ? (snap.ok ? `${pr.text} Showing this computer's threads only.` : `${pr.text} ${snap.error || ''}`.trim()) : pr.text;
   else if (!snap.ok) text = snap.error || "T3 Pet can't read T3.";
   else if (snap.notice) text = snap.notice;
   const lines = down.map(e => `Can't reach ${esc(e.label)}${e.error ? `: ${esc(e.error)}` : ''}. Check that it is on and that T3 Code runs there.`);
@@ -455,7 +455,7 @@ function renderConnection() {
     <details class="howto"><summary>Add another machine</summary><ol>
       <li>On each machine, open T3 Code → Settings → Labs and turn on <b>Linked environments</b>.</li>
       <li>On this computer, open T3 Code → Settings → Connections and link the other machine.</li>
-      <li>That's all. T3 Pet shows the new machine here within about 10 seconds; it needs no set-up of its own.</li>
+      <li>That's all. T3 Pet shows the new machine here within about a minute, or at once when you click Check again. It needs no set-up of its own.</li>
     </ol></details>`;
   if (conn._h === html) return; // unchanged: keep the open "Add another machine" box and button states
   const open = !!(conn.querySelector('.howto') || {}).open;

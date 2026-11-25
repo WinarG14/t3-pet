@@ -182,9 +182,8 @@ function focusT3() {
     const found = defaultT3App();
     if (found && fs.existsSync(found) && found !== settings.t3App) { settings.t3App = found; saveSettings(); }
   }
-  if (openT3App(settings.t3App)) return true;
-  shell.openExternal('t3code://').catch(() => {}); // last resort: T3's own link scheme starts or focuses it
-  return false;
+  // Last resort: T3's own link scheme, which starts or focuses it.
+  openT3App(settings.t3App, () => shell.openExternal('t3code://').catch(() => {}));
 }
 // T3's own link format: t3code://threads/<environmentId>/<threadId>. Works for linked environments too.
 function openThread(key) {
@@ -396,7 +395,11 @@ async function poll() {
 
 /** Poll now, after any poll that is already running (a click on "Check again" must not be skipped). */
 async function pollNow() {
-  for (let i = 0; polling && i < 400; i++) await new Promise(r => setTimeout(r, 100));
+  for (let i = 0; polling && i < 1200; i++) await new Promise(r => setTimeout(r, 100)); // the CLI can take 60 s
+  // Reset right before our own poll, so a poll that was already running cannot refill the caches first.
+  t3.resetBackoff();
+  tasks.refreshRemotes();
+  if (polling) return; // still busy after 2 minutes: the running poll already uses the reset state
   await poll();
 }
 
@@ -490,8 +493,6 @@ function setPet(id) {
 ipcMain.handle('pet:config', () => petConfig());
 ipcMain.handle('tasks:get', () => ({ snapshot, mood: watcher.petMood(snapshot) }));
 ipcMain.handle('tasks:refresh', async () => {
-  t3.resetBackoff();
-  tasks.refreshRemotes();
   await pollNow();
   return { snapshot, mood: watcher.petMood(snapshot) };
 });

@@ -153,8 +153,11 @@ class TaskSource {
     const s = this.getSettings();
     if (s.dataSource === 'database') return this.fallback(null);
     if (!this.client.serverRunning()) {
-      return require('fs').existsSync(this.client.userdata)
-        ? this.fallback({ code: 'not-running', text: 'T3 Code is not running, so linked machines are hidden.' })
+      const fs = require('fs');
+      if (fs.existsSync(this.client.userdata)) return this.fallback({ code: 'not-running', text: 'T3 Code is not running, so linked machines are hidden.' });
+      const app = this.getSettings().t3App;
+      return app && fs.existsSync(app)
+        ? this.fallback({ code: 'not-started', text: 'T3 Code is installed but has not run yet. Open it once; T3 Pet then connects by itself.' })
         : this.fallback({ code: 'not-installed', text: 'T3 Code is not set up on this computer yet. Install it and open it once; T3 Pet then connects by itself.' });
     }
     let envs;
@@ -173,8 +176,10 @@ class TaskSource {
       return this.fallback(problemFrom(e));
     }
     const remoteEvery = Math.max(5e3, s.remotePollMs || 10e3);
-    await Promise.all(envs.links.map(async link => {
-      const env = { ...link, isLocal: false };
+    // Record errors on the same objects that the snapshot publishes, so Settings and the notification
+    // logic both see an unreachable machine as unreachable.
+    await Promise.all(environments.slice(1).map(async env => {
+      const link = env;
       const c = this.remote.get(link.id);
       if (link.status !== 'reachable') {
         env.error = link.lastError || link.status;
@@ -227,6 +232,9 @@ class TaskSource {
     for (const t of candidates) {
       const r = this.reads.get(t.key) || {};
       if (r.completedAt && r.runId === t.runId) t.completedAt = r.completedAt;
+      // Not read yet: its state (for example "waiting" or "needs a reply") is still a guess, so the
+      // first read must not count as a change worth a notification.
+      t.provisional = !t.delegated && !this.reads.has(t.key);
       const visitedAt = t.isLocal && visits ? (visits.get(t.id) || '') : undefined;
       let { state, detail } = deriveState(t, { ...r, visitedAt });
       // Hidden in the pet: stays quiet until the thread starts a new run or changes status.
@@ -253,6 +261,7 @@ class TaskSource {
   /** "Check again": ask every linked machine on the next poll instead of waiting for its interval. */
   refreshRemotes() {
     for (const c of this.remote.values()) c.at = 0;
+    this.envsAt = 0; // also ask T3 again for its list of linked machines (new or recovered links)
   }
 
   /** This computer's T3 database only. `problem` ({ code, text }) says why, or null when the user chose it. */
@@ -263,7 +272,8 @@ class TaskSource {
     snap.source = 'database';
     snap.notice = problem ? `${problem.text} Showing this computer's threads only.` : 'Showing this computer only';
     snap.problem = problem || null;
-    snap.environments = [{ id: envId, label: os.hostname(), isLocal: true, status: 'reachable' }];
+    const quiet = problem && ['not-installed', 'not-started'].includes(problem.code); // no database yet is expected
+    snap.environments = [{ id: envId, label: os.hostname(), isLocal: true, ...(snap.ok || quiet ? { status: 'reachable' } : { status: 'error', error: snap.error }) }];
     this.last = snap;
     return snap;
   }
