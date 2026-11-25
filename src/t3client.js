@@ -219,7 +219,8 @@ class T3Client {
         this.saveSecret('actions', null);
         throw new McpError('T3 no longer accepts the actions sign-in (expired or revoked). Enable actions again in Settings.', { code: 'actions_off' });
       }
-      this.lastIssueError = new McpError('T3 refused the pet\u2019s read-only sign-in.', { code: 'unauthorized' });
+      this.saveSecret('read', null); // rejected: never reuse it
+      if (!this.lastIssueError) this.lastIssueError = new McpError('T3 refused the pet\u2019s read-only sign-in.', { code: 'unauthorized' });
       await this.readCredential({ forceNew: true });
       try {
         const r = await (await this.session('read')).callTool(tool, args);

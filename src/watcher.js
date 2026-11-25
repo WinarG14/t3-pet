@@ -241,17 +241,18 @@ function diffSnapshots(prev, next) {
   const before = new Map(prev.threads.map(t => [keyOf(t), t]));
   // A machine the previous snapshot could not see (T3 started after the pet, a link came back) is new
   // to the pet, not new to the user: take its threads as they are, without a notification burst.
-  // A machine counts as seen when it was reachable, or when the pet still had its threads (cached
-  // during a short outage): changes on it are real news. An expired link with no threads is not.
-  const seenEnvs = new Set([
-    ...(prev.environments || []).filter(e => !e.status || e.status === 'reachable').map(e => e.id),
-    ...prev.threads.map(t => t.envId),
-  ]);
+  // A machine counts as seen when it was reachable, or when only a request to it failed while its
+  // last list was still cached (even an empty one): changes on it are real news. An expired or
+  // disconnected link is not seen, so its threads don't alert when it comes back.
+  const seenEnvs = prev.environments
+    ? new Set(prev.environments.filter(e => !e.status || e.status === 'reachable' || e.cached).map(e => e.id))
+    : new Set(prev.threads.map(t => t.envId));
   const events = [];
   for (const t of next.threads) {
     if (t.envId && !seenEnvs.has(t.envId)) continue;
     const b = before.get(keyOf(t));
-    if (t.provisional || (b && b.provisional)) continue; // the first read of a thread sets its state; no alert
+    // The first read of an old thread sets its state; no alert, unless T3's list shows a real change.
+    if (t.provisional || (b && b.provisional && b.status === t.status && b.runId === t.runId)) continue;
     const was = b ? b.state : 'idle';
     if (t.state === was && (!b || b.runId === t.runId)) continue;
     if (t.state === 'waiting' && was !== 'waiting') events.push({ kind: 'waiting', thread: t });

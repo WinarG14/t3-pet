@@ -67,6 +67,7 @@ class TaskSource {
     this.reads = new Map();      // thread key -> cached read
     this.dismissed = new Map();  // thread key -> 'runId|status' hidden in the pet until that changes
     this.last = null;
+    this.firstSeen = new Map(); // envId -> when the pet first listed that machine's threads
   }
 
   async environments() {
@@ -193,7 +194,9 @@ class TaskSource {
         lists.push({ env, threads });
       } catch (e) {
         env.error = e.message;
-        if (c) lists.push({ env, threads: c.threads, stale: true });
+        // A failed request on a reachable link: keep its threads and count it as still seen, so real
+        // changes after the hiccup still alert. (An expired link above does not count as seen.)
+        if (c) { env.cached = true; lists.push({ env, threads: c.threads, stale: true }); }
       }
     }));
 
@@ -202,6 +205,7 @@ class TaskSource {
     const candidates = [];
     for (const { env, threads } of lists) {
       for (const raw of threads) {
+        if (!this.firstSeen.has(env.id)) this.firstSeen.set(env.id, Date.now());
         const t = this.normalize(raw, env);
         if (t.child || t.snoozed) continue;
         const active = ACTIVE.has(t.status) || t.status === 'waiting';
@@ -234,7 +238,8 @@ class TaskSource {
       if (r.completedAt && r.runId === t.runId) t.completedAt = r.completedAt;
       // Not read yet: its state (for example "waiting" or "needs a reply") is still a guess, so the
       // first read must not count as a change worth a notification.
-      t.provisional = !t.delegated && !this.reads.has(t.key);
+      // Only for threads that last changed before the pet first saw their machine: new activity alerts.
+      t.provisional = !t.delegated && !this.reads.has(t.key) && Date.parse(t.updatedAt) < (this.firstSeen.get(t.envId) || 0);
       const visitedAt = t.isLocal && visits ? (visits.get(t.id) || '') : undefined;
       let { state, detail } = deriveState(t, { ...r, visitedAt });
       // Hidden in the pet: stays quiet until the thread starts a new run or changes status.
@@ -253,7 +258,7 @@ class TaskSource {
     for (const t of out) counts[t.state] = (counts[t.state] || 0) + 1;
     this.last = {
       ok: true, source: 'mcp', serverAlive: true, threads: out, counts, at: new Date().toISOString(),
-      environments: environments.map(e => ({ id: e.id, label: e.label, isLocal: e.isLocal, status: e.error ? 'error' : e.status, error: e.error || null })),
+      environments: environments.map(e => ({ id: e.id, label: e.label, isLocal: e.isLocal, status: e.error ? 'error' : e.status, error: e.error || null, cached: !!e.cached })),
     };
     return this.last;
   }

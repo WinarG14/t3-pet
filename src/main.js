@@ -64,6 +64,7 @@ let tray = null;
 let snapshot = null;
 let pollTimer = null;
 let polling = false;
+let pollPromise = null;
 let mutedUntil = 0;
 
 function loadSettings() {
@@ -366,6 +367,8 @@ const EVENT_TEXT = {
 async function poll() {
   if (polling) return;
   polling = true;
+  let finished;
+  pollPromise = new Promise(r => { finished = r; });
   try {
     const next = await tasks.snapshot();
     const events = watcher.diffSnapshots(snapshot, next);
@@ -390,16 +393,16 @@ async function poll() {
     console.error('poll failed', e);
   } finally {
     polling = false;
+    finished();
   }
 }
 
 /** Poll now, after any poll that is already running (a click on "Check again" must not be skipped). */
 async function pollNow() {
-  for (let i = 0; polling && i < 1200; i++) await new Promise(r => setTimeout(r, 100)); // the CLI can take 60 s
+  while (polling && pollPromise) await pollPromise.catch(() => {}); // the running poll ends (its calls time out)
   // Reset right before our own poll, so a poll that was already running cannot refill the caches first.
   t3.resetBackoff();
   tasks.refreshRemotes();
-  if (polling) return; // still busy after 2 minutes: the running poll already uses the reset state
   await poll();
 }
 

@@ -27,7 +27,7 @@ function openT3App(appPath, onFail = () => {}) {
     if (IS_MAC) {
       const child = spawn('open', appPath && fs.existsSync(appPath) ? ['-a', appPath] : ['-a', 'T3 Code (Beta)'], { stdio: 'ignore' });
       child.on('error', onFail);
-      child.on('exit', code => { if (code) onFail(); }); // `open` exits 1 when it cannot find the app
+      child.on('exit', code => { if (code !== 0) onFail(); }); // `open` exits 1 when it cannot find the app
       return;
     }
     if (appPath && fs.existsSync(appPath)) {

@@ -105,8 +105,14 @@ assert.deepStrictEqual(w.diffSnapshots(both, later).map(e => e.kind + ':' + e.th
 assert.strictEqual(w.petMood({ ok: false, problem: { code: 'not-installed' } }).anim, 'idle', 'no T3 yet: a calm pet, not a sad one');
 const expired = { ...both, environments: [local, { id: 'pc', status: 'expired' }], threads: [th('mac', 'a', 'done')] };
 assert.deepStrictEqual(w.diffSnapshots(expired, both), [], 'an expired link that comes back: no burst');
-const downCached = { ...both, environments: [local, { id: 'pc', status: 'error' }], threads: [th('mac', 'a', 'done'), th('pc', 'b', 'running')] };
+const downCached = { ...both, environments: [local, { id: 'pc', status: 'error', cached: true }], threads: [th('mac', 'a', 'done'), th('pc', 'b', 'running')] };
 assert.deepStrictEqual(w.diffSnapshots(downCached, later).map(e => e.kind + ':' + e.thread.key).sort(), ['failed:pc/c', 'needs-reply:pc/b', 'waiting:pc/d'], 'a short outage with cached threads: real changes still alert');
+const expiredCached = { ...downCached, environments: [local, { id: 'pc', status: 'expired' }] };
+assert.deepStrictEqual(w.diffSnapshots(expiredCached, later), [], 'an expired link with cached threads: no alerts when it comes back');
+const emptyOutage = { ...both, environments: [local, { id: 'pc', status: 'error', cached: true }], threads: [th('mac', 'a', 'done')] };
+assert.deepStrictEqual(w.diffSnapshots(emptyOutage, { ...both, threads: [th('mac', 'a', 'done'), th('pc', 'd', 'waiting')] }).map(e => e.kind + ':' + e.thread.key), ['waiting:pc/d'], 'a hiccup on a machine with an empty list: a new request still alerts');
+const stp = (k, state, status, provisional) => ({ ...th('pc', k, state), status, provisional });
+assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [stp('f', 'running', 'running', true)] }, { ...both, threads: [stp('f', 'waiting', 'waiting', false)] }).length, 1, 'an unread thread whose T3 status changed still alerts');
 // The first detail read of a thread (pending approvals, a question at the end) is its starting state.
 const pv = (k, state, provisional) => ({ ...th('pc', k, state), provisional });
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [pv('e', 'running', true)] }, { ...both, threads: [pv('e', 'waiting', false)] }), [], 'first read: no alert');
