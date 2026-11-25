@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('pet', {
   onPetVisibility: fn => on('pet:visibility', fn),
   settings: () => ipcRenderer.invoke('settings:get'),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),
+  setMuted: (kind, key, on) => ipcRenderer.invoke('mute:set', { kind, key, on: !!on }),
   setKey: (name, value) => ipcRenderer.invoke('keys:set', { name, value }),
   pets: () => ipcRenderer.invoke('pets:list'),
   onPets: fn => on('pets:list', fn),

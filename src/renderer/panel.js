@@ -217,7 +217,8 @@ function render() {
   $('#empty').hidden = !!active.length || !snap.ok;
   $('#quiet').hidden = !quiet.length;
   $('#quietCount').textContent = quiet.length;
-  patchList($('#quietList'), quiet.slice(0, 30).map(t => ({ id: 't:' + t.key, kind: 'task', key: t.key, parts: taskParts(t, multiEnv) })));
+  // Muted cards always show (their bell is the way to unmute); only other quiet threads are capped.
+  patchList($('#quietList'), [...quiet.filter(t => t.muted), ...quiet.filter(t => !t.muted).slice(0, 30)].map(t => ({ id: 't:' + t.key, kind: 'task', key: t.key, parts: taskParts(t, multiEnv) })));
   const src = snap.source === 'database' ? "this computer's T3 database" : 'T3';
   $('#foot').textContent = snap.ok ? `Updated ${new Date(snap.at).toLocaleTimeString()} from ${src}.` : '';
   $('#actionsBanner').hidden = !actionsHint;
@@ -289,10 +290,8 @@ function isMuted(kind, key) {
   return !!(S && S.muted && (S.muted[kind] || []).includes(key));
 }
 async function setMuted(kind, key, on) {
-  if (!S) S = await window.pet.settings();
-  const m = { projects: [...((S.muted && S.muted.projects) || [])], schedules: [...((S.muted && S.muted.schedules) || [])] };
-  m[kind] = on ? [...new Set([...m[kind], key])] : m[kind].filter(k => k !== key);
-  await save({ muted: m });
+  S = await window.pet.setMuted(kind, key, on); // applied in the main process, one change at a time
+  $('#saved').textContent = 'Saved ' + new Date().toLocaleTimeString();
   renderMuted(true);
 }
 async function muteAction(key, act) {

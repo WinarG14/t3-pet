@@ -558,6 +558,18 @@ ipcMain.handle('settings:set', (_e, patch) => {
   if ('scale' in patch) applyPetLayout();
   return publicSettings();
 });
+// One mute change at a time, applied to the current list here, so two quick toggles can't undo each other.
+ipcMain.handle('mute:set', (_e, req) => {
+  const { kind, key, on } = req || {};
+  if (!['projects', 'schedules'].includes(kind) || typeof key !== 'string' || key.length > 400) return publicSettings();
+  const m = settings.muted || {};
+  const cur = { projects: [...(m.projects || [])], schedules: [...(m.schedules || [])] };
+  cur[kind] = on ? [...new Set([...cur[kind], key])].slice(0, 500) : cur[kind].filter(k => k !== key);
+  settings.muted = cur;
+  saveSettings();
+  startPolling();
+  return publicSettings();
+});
 ipcMain.handle('keys:set', (_e, { name, value }) => {
   if (!['fal', 'venice'].includes(name)) throw new Error('Unknown key');
   settings.keys = settings.keys || {};

@@ -82,6 +82,7 @@ class TaskSource {
     this.last = null;
     this.firstSeen = new Map(); // envId -> when the pet first listed that machine's threads
     this.schedules = new Map(); // envKey -> { at, tasks } (T3 scheduled tasks, for muting)
+    this.scheduleOf = new Map(); // thread key -> { scheduleKey, scheduleTitle }: last match, for offline use
   }
 
   async environments() {
@@ -177,6 +178,7 @@ class TaskSource {
       blocked: !!raw.blockedOnThreadWait || (raw.pendingBackgroundTasks || []).length > 0,
       child: !!raw.parentThreadId,
       delegated: !!raw.delegatedFrom,
+      byUser: raw.createdBy === 'user',
     };
   }
 
@@ -245,10 +247,33 @@ class TaskSource {
       }
     }
 
-    // Read the threads that matter, newest first, a few per poll. Never read child or delegated threads:
-    // T3 marks a child's final result as delivered when it is read.
+    // Schedules and mutes come first, so muted threads can't use up the detail reads below.
+    // A machine that is down keeps its last known schedules while its cached threads still show.
+    const scheds = new Map();
+    for (const env of environments) {
+      const k = env.isLocal ? 'local' : env.id;
+      if (env.isLocal || env.status === 'reachable') scheds.set(env.id, await this.scheduleList(env.id, env.isLocal));
+      else if (this.schedules.has(k)) scheds.set(env.id, this.schedules.get(k).tasks);
+    }
+    const muted = mutedSets(s);
+    for (const t of candidates) {
+      const list = scheds.get(t.envId) || [];
+      // Its schedule: the schedule's own (bound) thread first; else, for a schedule that starts a new thread
+      // per run, a thread an agent made in the schedule's project with the schedule's title (never one the
+      // user started by hand).
+      const sc = list.find(x => x.boundThreadId === t.id)
+        || (!t.byUser ? list.find(x => !x.boundThreadId && x.projectId === t.projectId && x.title === t.title) : null);
+      const known = sc ? { scheduleKey: `${t.envId}/${sc.scheduledTaskId}`, scheduleTitle: sc.title || 'Scheduled task' } : (scheds.has(t.envId) ? null : this.scheduleOf.get(t.key));
+      if (known) { Object.assign(t, known); this.scheduleOf.set(t.key, known); } else if (scheds.has(t.envId)) this.scheduleOf.delete(t.key);
+      t.projectKey = `${t.envId}/${t.projectId}`;
+      t.mutedBy = t.scheduleKey && muted.schedules.has(t.scheduleKey) ? 'schedule' : muted.projects.has(t.projectKey) ? 'project' : null;
+      t.muted = !!t.mutedBy;
+    }
+
+    // Read the threads that matter, unmuted and newest first, a few per poll. Never read child or delegated
+    // threads: T3 marks a child's final result as delivered when it is read.
     let budget = MAX_READS_PER_POLL;
-    const ordered = [...candidates].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    const ordered = [...candidates].sort((a, b) => (a.muted - b.muted) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
     for (const t of ordered) {
       if (t.delegated || budget <= 0) continue;
       const c = this.reads.get(t.key);
@@ -259,22 +284,11 @@ class TaskSource {
     }
 
     const names = new Map();
-    const scheds = new Map();
     for (const env of environments) {
-      if (env.isLocal || env.status === 'reachable') {
-        names.set(env.id, await this.projectNames(env.id, env.isLocal).catch(() => new Map()));
-        scheds.set(env.id, await this.scheduleList(env.id, env.isLocal));
-      }
+      if (env.isLocal || env.status === 'reachable') names.set(env.id, await this.projectNames(env.id, env.isLocal).catch(() => new Map()));
     }
-    const muted = mutedSets(s);
     const out = [];
     for (const t of candidates) {
-      // Which schedule made this thread: its bound thread, or a new thread per run with the schedule's title.
-      const sc = (scheds.get(t.envId) || []).find(x => x.boundThreadId === t.id || (!x.boundThreadId && x.projectId === t.projectId && x.title === t.title));
-      if (sc) Object.assign(t, { scheduleKey: `${t.envId}/${sc.scheduledTaskId}`, scheduleTitle: sc.title || 'Scheduled task' });
-      t.projectKey = `${t.envId}/${t.projectId}`;
-      t.mutedBy = t.scheduleKey && muted.schedules.has(t.scheduleKey) ? 'schedule' : muted.projects.has(t.projectKey) ? 'project' : null;
-      t.muted = !!t.mutedBy;
       const r = this.reads.get(t.key) || {};
       if (r.completedAt && r.runId === t.runId) t.completedAt = r.completedAt;
       // Not read yet: its state (for example "waiting" or "needs a reply") is still a guess, so the
@@ -327,7 +341,12 @@ class TaskSource {
     const envId = (() => { try { return require('fs').readFileSync(require('path').join(watcher.T3_DIR, 'environment-id'), 'utf8').trim(); } catch { return 'local'; } })();
     for (const t of snap.threads || []) Object.assign(t, { key: `${envId}/${t.id}`, envId, envLabel: os.hostname(), isLocal: true });
     const muted = mutedSets(this.getSettings());
-    for (const t of snap.threads || []) { t.projectKey = `${envId}/${t.projectId}`; t.mutedBy = muted.projects.has(t.projectKey) ? 'project' : null; t.muted = !!t.mutedBy; }
+    for (const t of snap.threads || []) {
+      t.projectKey = `${envId}/${t.projectId}`;
+      Object.assign(t, this.scheduleOf.get(`${envId}/${t.id}`) || {}); // schedule matches seen while T3 ran
+      t.mutedBy = t.scheduleKey && muted.schedules.has(t.scheduleKey) ? 'schedule' : muted.projects.has(t.projectKey) ? 'project' : null;
+      t.muted = !!t.mutedBy;
+    }
     if (snap.ok) snap.counts = countStates(snap.threads);
     snap.source = 'database';
     snap.notice = problem ? `${problem.text} Showing this computer's threads only.` : 'Showing this computer only';
