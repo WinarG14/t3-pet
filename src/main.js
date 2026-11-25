@@ -630,7 +630,11 @@ app.whenReady().then(() => {
   setInterval(() => ensurePetOnTop('check'), 5000);
   for (const ev of ['resume', 'unlock-screen']) powerMonitor.on(ev, () => setTimeout(() => ensurePetOnTop('shown'), 1000));
   petLog('app started', `(v${app.getVersion()}, pet ${settings.petHidden ? 'hidden' : 'shown'})`);
-  startPolling();
+  // The first check reads the stored sign-in, and on macOS that can wait on a Keychain prompt (after
+  // every update). Start it once the pet is on screen, so the pet shows while the prompt waits.
+  const begin = () => { if (!pollTimer) startPolling(); };
+  if (petWin) petWin.once('ready-to-show', () => setTimeout(begin, 300));
+  setTimeout(begin, 4000);
   // `--panel` or `--panel=<tasks|pets|build|settings>` opens the panel at start (handy while developing).
   // `--test-notification` shows one sample notification (to check OS notification permissions).
   if (process.argv.includes('--test-notification')) setTimeout(() => toast('T3 Pet test notification', 'If you can read this, notifications work.'), 1500);
