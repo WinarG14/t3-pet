@@ -176,7 +176,8 @@ class TaskSource {
       snoozed: !!raw.snoozed,
       pinned: !!raw.pinned,
       blocked: !!raw.blockedOnThreadWait || (raw.pendingBackgroundTasks || []).length > 0,
-      child: !!raw.parentThreadId,
+      // A fork is a thread of its own that the user works in; only sub-tasks are children.
+      child: !!raw.parentThreadId && raw.relationshipToParent !== 'fork',
       delegated: !!raw.delegatedFrom,
       byUser: raw.createdBy === 'user',
     };

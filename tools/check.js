@@ -119,4 +119,13 @@ assert.deepStrictEqual(w.diffSnapshots(both, mutedLater), [], 'a muted project o
 const pv = (k, state, provisional) => ({ ...th('pc', k, state), provisional });
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [pv('e', 'running', true)] }, { ...both, threads: [pv('e', 'waiting', false)] }), [], 'first read: no alert');
 assert.deepStrictEqual(w.diffSnapshots({ ...both, threads: [pv('e', 'running', false)] }, { ...both, threads: [pv('e', 'waiting', false)] }).length, 1, 'a later change still alerts');
+// A fork is a thread the user works in: it shows like any other thread. A sub-task stays hidden.
+const { TaskSource } = require('../src/tasks');
+const norm = raw => TaskSource.prototype.normalize.call({}, { threadId: 'x', status: 'running', ...raw }, { id: 'mac', label: 'mac', isLocal: true });
+assert.strictEqual(norm({ parentThreadId: 'p', relationshipToParent: 'fork' }).child, false, 'a fork is not a child (T3 tools)');
+assert.strictEqual(norm({ parentThreadId: 'p', relationshipToParent: 'subagent' }).child, true, 'a sub-task is a child (T3 tools)');
+assert.strictEqual(norm({}).child, false, 'a plain thread is not a child');
+assert.strictEqual(w.isChildThread('a', { lineage: { parentThreadId: 'p', relationshipToParent: 'fork' } }), false, 'a fork is not a child (database)');
+assert.strictEqual(w.isChildThread('a', { lineage: { parentThreadId: 'p', relationshipToParent: 'subagent' } }), true, 'a sub-task is a child (database)');
+assert.strictEqual(w.isChildThread('thread:subagent:1', {}), true, 'a sub-task id is a child (database)');
 console.log('state rule checks passed');

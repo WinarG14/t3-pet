@@ -73,7 +73,8 @@ function looksLikeQuestion(text) {
 function isChildThread(id, payload) {
   if (/^thread:(subagent|delegated-task)/.test(id)) return true;
   const lin = payload && payload.lineage;
-  return !!(lin && lin.parentThreadId);
+  // A fork is a thread of its own that the user works in, so it is not a child.
+  return !!(lin && lin.parentThreadId && lin.relationshipToParent !== 'fork');
 }
 
 /**
@@ -280,4 +281,4 @@ function petMood(snapshot) {
   return { anim: 'idle', label: 'All quiet' };
 }
 
-module.exports = { readSnapshot, readLocalVisits, diffSnapshots, petMood, needLine, looksLikeQuestion, clip, lastParagraph, DEFAULT_DB, T3_DIR };
+module.exports = { isChildThread, readSnapshot, readLocalVisits, diffSnapshots, petMood, needLine, looksLikeQuestion, clip, lastParagraph, DEFAULT_DB, T3_DIR };
